@@ -1,71 +1,139 @@
-import { useState, useEffect, useCallback, useRef } from 'react';
-import { View, Text, FlatList, TouchableOpacity, Alert, ActivityIndicator, Modal, RefreshControl } from 'react-native';
-import { router } from 'expo-router';
+import { useEffect, useState, useCallback, useRef } from 'react';
+import {
+  View, Text, FlatList, TouchableOpacity, StyleSheet,
+  RefreshControl, Alert, Modal, TextInput, ScrollView,
+  ActivityIndicator, Image,
+} from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
+import { activateKeepAwakeAsync, deactivateKeepAwake } from 'expo-keep-awake';
+import * as ImagePicker from 'expo-image-picker';
 import { ticketsApi } from '../../src/api/tickets';
 import { useTracking } from '../../src/hooks/useTracking';
 import { useAuthStore } from '../../src/store/authStore';
 import { getSocket, disconnectSocket } from '../../src/socket/socket';
 import { authApi } from '../../src/api/auth';
+import { api } from '../../src/api/client';
+import { router } from 'expo-router';
 import type { Ticket, EstadoTicket } from '../../src/types';
 
-const COLOR = { verde: '#22c55e', azul: '#00d4ff', naranja: '#f59e0b', rojo: '#ef4444', gris: '#555', fondo: '#0a0a0a', card: '#1a1a1a', texto: '#fff', texto2: '#aaa' };
-
-const estadosPrevios: Record<EstadoTicket, EstadoTicket[]> = {
-  PENDIENTE: [], ASIGNADO: ['PENDIENTE'], EN_RUTA: ['ASIGNADO'], EN_RECOJO: ['EN_RUTA'],
-  RECOGIDO: ['EN_RECOJO'], ENTREGADO: ['RECOGIDO'], CERRADO: ['ENTREGADO', 'RECOGIDO'], CANCELADO: ['PENDIENTE', 'ASIGNADO'], FALLIDO: ['EN_RUTA', 'EN_RECOJO'],
+const C = {
+  blue:'#4BBFE0', blueDark:'#2fa8cc', blueLight:'#EBF7FC', blueBorder:'#c8ebf7',
+  gray:'#8C8C8C', grayLight:'#F5F6F8', grayBorder:'#E8E8E8',
+  text:'#1a1a2e', text2:'#6b7280',
+  green:'#2ECC71', greenLight:'#EAFAF1',
+  orange:'#F39C12', orangeLight:'#FEF9EC',
+  red:'#E74C3C', redLight:'#FEF0EF',
+  white:'#FFFFFF',
 };
 
-const coloresEstado: Record<string, string> = {
-  PENDIENTE: '#f59e0b', ASIGNADO: '#3b82f6', EN_RUTA: '#8b5cf6', EN_RECOJO: '#f97316',
-  RECOGIDO: '#22c55e', ENTREGADO: '#22c55e', CERRADO: '#6b7280', CANCELADO: '#ef4444', FALLIDO: '#ef4444',
+const SIGUIENTE: Partial<Record<EstadoTicket, EstadoTicket>> = {
+  ASIGNADO: 'EN_RUTA',
+  EN_RUTA: 'EN_RECOJO',
+  EN_RECOJO: 'RECOGIDO',
+  RECOGIDO: 'ENTREGADO',
 };
+
+const BOTON_LABEL: Partial<Record<string, string>> = {
+  pending: '🏍️  Voy ahora',
+  active:  '🧪  Ya recogí la muestra',
+};
+
+const BOTON_COLOR: Record<string, string> = {
+  pending: C.orange,
+  active:  C.blue,
+};
+
+// Mapeo de estado backend → UI
+function mapStatus(estado: EstadoTicket): 'pending' | 'active' | 'done' {
+  if (['ASIGNADO'].includes(estado)) return 'pending';
+  if (['EN_RUTA','EN_RECOJO','RECOGIDO'].includes(estado)) return 'active';
+  return 'done';
+}
+
+// Configuración de estados del motorizado
+const ESTADOS_MOTO = {
+  DISPONIBLE: { label:'Disponible', ic:'🟢', color:C.green, bg:C.greenLight, border:'#a8e6c4', gpsColor:C.green, gpsTxt:'GPS activo · En turno', bannerTxt:'En turno · Disponible para recojos', bannerIc:'✅', backendEstado:'DISPONIBLE' },
+  OCUPADO:    { label:'Refrigerio', ic:'🍽️', color:C.orange, bg:C.orangeLight, border:'#fde8a0', gpsColor:C.orange, gpsTxt:'En refrigerio · GPS activo', bannerTxt:'En refrigerio · Pausa temporal', bannerIc:'🍽️', backendEstado:'OCUPADO' },
+  OFF_LINE:   { label:'Fin de turno', ic:'🏁', color:C.red, bg:C.redLight, border:'#fecdc9', gpsColor:C.red, gpsTxt:'Turno finalizado · GPS detenido', bannerTxt:'Turno finalizado · Fuera de servicio', bannerIc:'🏁', backendEstado:'OFF_LINE' },
+};
+
+type EstadoMoto = 'DISPONIBLE' | 'OCUPADO' | 'OFF_LINE';
+type MetodoPago = 'EFECTIVO' | 'YAPE' | 'TRANSFERENCIA' | 'SIN_PAGO';
 
 export default function TicketsScreen() {
-  const { user, clearUser } = useAuthStore();
-  const { startTracking, stopTracking } = useTracking();
+  const user = useAuthStore((s) => s.user);
+  const clearUser = useAuthStore((s) => s.clearUser);
   const [tickets, setTickets] = useState<Ticket[]>([]);
-  const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [turnoActivo, setTurnoActivo] = useState(false);
-  const [turnoLoading, setTurnoLoading] = useState(false);
-  const [modalVisible, setModalVisible] = useState(false);
-  const [ticketAccion, setTicketAccion] = useState<Ticket | null>(null);
-  const [estadoDestino, setEstadoDestino] = useState<EstadoTicket | null>(null);
-  const wsConnected = useRef(false);
-  const accionLoading = useRef(false);
+  const [loadingId, setLoadingId] = useState<string | null>(null);
+  const [estadoMoto, setEstadoMoto] = useState<EstadoMoto>('DISPONIBLE');
+
+  // Modales
+  const [estadoModal, setEstadoModal] = useState(false);
+  const [estadoSel, setEstadoSel] = useState<EstadoMoto>('DISPONIBLE');
+  const [registroModal, setRegistroModal] = useState(false);
+  const [confirmModal, setConfirmModal] = useState(false);
+
+  // Datos del registro
+  const [refNombre, setRefNombre] = useState('');
+  const [observaciones, setObservaciones] = useState('');
+  const [fotoUri, setFotoUri] = useState<string | null>(null);
+  const [metodoPago, setMetodoPago] = useState<MetodoPago | null>(null);
+  const [monto, setMonto] = useState('');
+  const [subiendo, setSubiendo] = useState(false);
+
+  const currentTicketId = useRef<string | null>(null);
+  const { startTracking, stopTracking } = useTracking();
 
   const cargarTickets = useCallback(async () => {
     try {
       const data = await ticketsApi.getMisTickets();
-      setTickets(Array.isArray(data) ? data : []);
+      setTickets(data);
     } catch (e) {
-      console.log('Error cargando tickets');
+      console.error('Error cargando tickets:', e);
     }
   }, []);
 
   useEffect(() => {
-    cargarTickets().finally(() => setLoading(false));
-    const intervalo = setInterval(cargarTickets, 10000);
-    return () => clearInterval(intervalo);
-  }, [cargarTickets]);
-
-  useEffect(() => {
-    (async () => {
-      try {
-        const socket = await getSocket();
-        socket.on('ticket:updated', () => cargarTickets());
-        socket.on('connect', () => { wsConnected.current = true; });
-        socket.on('disconnect', () => { wsConnected.current = false; });
-      } catch {}
-    })();
+    cargarTickets();
+    const initSocket = async () => {
+      const socket = await getSocket();
+      socket.on('ticket:new', () => cargarTickets());
+      socket.on('ticket:update', () => cargarTickets());
+    };
+    initSocket();
     return () => { disconnectSocket(); };
   }, []);
 
-  const handleLogout = () => {
-    Alert.alert('Cerrar sesión', '¿Estás seguro?', [
+  const onRefresh = async () => {
+    setRefreshing(true);
+    await cargarTickets();
+    setRefreshing(false);
+  };
+
+  const iniciarTurno = async () => {
+    await activateKeepAwakeAsync();
+    await startTracking();
+    setTurnoActivo(true);
+    setEstadoMoto('DISPONIBLE');
+    try { await api.patch(`/motorizados/me/estado`, { estado: 'DISPONIBLE' }); } catch {}
+  };
+
+  const finalizarTurno = async () => {
+    await stopTracking();
+    deactivateKeepAwake();
+    setTurnoActivo(false);
+    setEstadoMoto('OFF_LINE');
+    try { await api.patch(`/motorizados/me/estado`, { estado: 'OFF_LINE' }); } catch {}
+  };
+
+  const logout = () => {
+    Alert.alert('Cerrar sesión', '¿Seguro que quieres salir?', [
       { text: 'Cancelar', style: 'cancel' },
       { text: 'Salir', style: 'destructive', onPress: async () => {
-        await stopTracking();
+        if (turnoActivo) await finalizarTurno();
+        disconnectSocket();
         await authApi.logout();
         clearUser();
         router.replace('/login');
@@ -73,203 +141,529 @@ export default function TicketsScreen() {
     ]);
   };
 
-  const iniciarTurno = async () => {
-    setTurnoLoading(true);
-    try {
-      const ok = await startTracking();
-      if (ok) {
-        setTurnoActivo(true);
-      } else {
-        Alert.alert('⚠️', 'No se pudo obtener permisos GPS. Revisa la configuración del dispositivo.');
-      }
-    } catch (e) {
-      Alert.alert('Error', 'No se pudo iniciar el turno');
-    } finally {
-      setTurnoLoading(false);
+  // Avanzar estado de ticket
+  const avanzarEstado = async (ticket: Ticket) => {
+    const uiStatus = mapStatus(ticket.estado);
+    if (uiStatus === 'done') return;
+
+    if (uiStatus === 'active') {
+      // Mostrar modal de registro antes de confirmar recojo
+      currentTicketId.current = ticket.id;
+      resetRegistroForm();
+      setRegistroModal(true);
+      return;
     }
-  };
 
-  const finalizarTurno = () => {
-    Alert.alert('Finalizar turno', '¿Seguro que deseas finalizar el turno? Se desactivará el GPS.', [
-      { text: 'Cancelar', style: 'cancel' },
-      { text: 'Finalizar', style: 'destructive', onPress: async () => {
-        await stopTracking();
-        setTurnoActivo(false);
-      }},
-    ]);
-  };
-
-  const avanzarEstado = async (ticket: Ticket, nuevoEstado: EstadoTicket) => {
-    if (accionLoading.current) return;
-    accionLoading.current = true;
-
-    // Si no hay turno activo, iniciarlo automáticamente
-    if (!turnoActivo) await iniciarTurno();
-
+    // pending → EN_RUTA directo
+    setLoadingId(ticket.id);
     try {
-      // Si es PENDIENTE → ASIGNADO, usar tomarTicket
-      if (ticket.estado === 'PENDIENTE' && nuevoEstado === 'ASIGNADO') {
-        await ticketsApi.tomarTicket(ticket.id);
-      } else {
-        await ticketsApi.updateEstado(ticket.id, nuevoEstado);
-      }
+      await ticketsApi.updateEstado(ticket.id, 'EN_RUTA');
+      if (!turnoActivo) await iniciarTurno();
       await cargarTickets();
-      Alert.alert('✅ Listo', `Ticket actualizado a "${nuevoEstado.replace(/_/g, ' ')}"`);
     } catch (e: any) {
-      Alert.alert('Error', e?.response?.data?.message || 'No se pudo actualizar');
+      const msg = e.response?.data?.message;
+      Alert.alert('Error', Array.isArray(msg) ? msg[0] : msg ?? 'No se pudo actualizar');
     } finally {
-      accionLoading.current = false;
-      setModalVisible(false);
+      setLoadingId(null);
     }
   };
 
-  const confirmarAccion = (ticket: Ticket, estado: EstadoTicket) => {
-    setTicketAccion(ticket);
-    setEstadoDestino(estado);
-    setModalVisible(true);
+  const resetRegistroForm = () => {
+    setRefNombre('');
+    setObservaciones('');
+    setFotoUri(null);
+    setMetodoPago(null);
+    setMonto('');
   };
+
+  // Al presionar "Confirmar recojo" en el formulario → mostrar alerta
+  const intentarConfirmar = () => {
+    setConfirmModal(true);
+  };
+
+  // Presionó "Sí" en el alert → confirmar sin eventualidades
+  const confirmarSinEventualidades = async () => {
+    setConfirmModal(false);
+    setRegistroModal(false);
+    await completarRecojo();
+  };
+
+  // Presionó "No" → volver al formulario
+  const volverAlFormulario = () => {
+    setConfirmModal(false);
+  };
+
+  const completarRecojo = async () => {
+    const id = currentTicketId.current;
+    if (!id) return;
+    setSubiendo(true);
+    try {
+      // 1. Subir foto si hay
+      let fotoUrl: string | undefined;
+      if (fotoUri) {
+        try {
+          const { url } = await ticketsApi.subirEvidencia(id, fotoUri);
+          fotoUrl = url;
+        } catch { /* foto opcional, continuar */ }
+      }
+      // 2. Registrar cobro si hay
+      if (metodoPago && metodoPago !== 'SIN_PAGO' && monto) {
+        try {
+          await ticketsApi.registrarCobro(id, {
+            metodo: metodoPago,
+            monto: parseFloat(monto),
+          });
+        } catch { /* cobro opcional, continuar */ }
+      }
+      // 3. Guardar registro general si hay datos
+      if (refNombre || observaciones || fotoUrl) {
+        try {
+          await ticketsApi.guardarRegistro(id, {
+            refNombre,
+            observaciones,
+            fotoUrl,
+          });
+        } catch { /* registro opcional, continuar */ }
+      }
+      // 4. Cambiar estado a RECOGIDO
+      await ticketsApi.updateEstado(id, 'RECOGIDO');
+      await cargarTickets();
+    } catch (e: any) {
+      Alert.alert('Error', 'No se pudo completar el recojo');
+    } finally {
+      setSubiendo(false);
+      currentTicketId.current = null;
+    }
+  };
+
+  const tomarFoto = async () => {
+    const { status } = await ImagePicker.requestCameraPermissionsAsync();
+    if (status !== 'granted') {
+      Alert.alert('Permiso requerido', 'Necesitamos acceso a la cámara');
+      return;
+    }
+    const result = await ImagePicker.launchCameraAsync({
+      quality: 0.7,
+      allowsEditing: false,
+    });
+    if (!result.canceled) setFotoUri(result.assets[0].uri);
+  };
+
+  const confirmarEstadoMoto = async () => {
+    setEstadoModal(false);
+    setEstadoMoto(estadoSel);
+    const e = ESTADOS_MOTO[estadoSel];
+    if (estadoSel === 'OFF_LINE') {
+      await finalizarTurno();
+    } else if (!turnoActivo) {
+      await iniciarTurno();
+    }
+    try { await api.patch(`/motorizados/me/estado`, { estado: e.backendEstado }); } catch {}
+  };
+
+  // Separar tickets por grupo
+  const activos = tickets.filter(t => mapStatus(t.estado) === 'active');
+  const pendientes = tickets.filter(t => mapStatus(t.estado) === 'pending');
+  const completados = tickets.filter(t => mapStatus(t.estado) === 'done');
+
+  const eActual = ESTADOS_MOTO[estadoMoto];
 
   const renderTicket = ({ item }: { item: Ticket }) => {
-    const accionesDisponibles = Object.entries(estadosPrevios).find(([, previos]) => previos.includes(item.estado));
-    const siguienteEstado = accionesDisponibles?.[0] as EstadoTicket | undefined;
+    const uiStatus = mapStatus(item.estado);
+    const isDone = uiStatus === 'done';
+    const btnLabel = BOTON_LABEL[uiStatus];
+    const btnColor = BOTON_COLOR[uiStatus];
+    const cargando = loadingId === item.id;
+    const borderColor = uiStatus === 'pending' ? C.orange : uiStatus === 'active' ? C.blue : C.green;
 
     return (
-      <TouchableOpacity onLongPress={() => {}}
-        style={{ backgroundColor: COLOR.card, borderRadius: 16, padding: 16, marginBottom: 12, borderLeftWidth: 4, borderLeftColor: coloresEstado[item.estado] || COLOR.gris }}>
-        <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
-          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
-            <Text style={{ color: COLOR.texto, fontSize: 16, fontWeight: 'bold' }}>{item.referencia?.nombre || 'Sin referencia'}</Text>
+      <View style={[s.tcard, { borderLeftColor: borderColor }, uiStatus === 'active' && s.tcardActive]}>
+        <View style={s.tcTop}>
+          <Text style={s.tcId}>#{item.id.slice(-6).toUpperCase()}</Text>
+          <View style={[s.badge, {
+            backgroundColor: uiStatus === 'pending' ? C.orangeLight : uiStatus === 'active' ? C.blueLight : C.greenLight,
+            borderColor: uiStatus === 'pending' ? '#fde8a0' : uiStatus === 'active' ? C.blueBorder : '#a8e6c4',
+          }]}>
+            <Text style={[s.badgeTxt, { color: uiStatus === 'pending' ? C.orange : uiStatus === 'active' ? C.blue : C.green }]}>
+              {uiStatus === 'pending' ? 'PENDIENTE' : uiStatus === 'active' ? 'EN CAMINO' : 'COMPLETADO ✓'}
+            </Text>
           </View>
-          <Text style={{ color: coloresEstado[item.estado], fontSize: 11, fontWeight: 'bold', backgroundColor: '#111', paddingHorizontal: 8, paddingVertical: 3, borderRadius: 6, overflow: 'hidden' }}>
-            {item.estado.replace(/_/g, ' ')}
-          </Text>
         </View>
 
-        <Text style={{ color: COLOR.texto2, fontSize: 13 }}>{item.referencia?.direccion || 'Sin dirección'}</Text>
-
-        {item.horaLimite && (
-          <Text style={{ color: '#f59e0b', fontSize: 12, marginTop: 4 }}>
-            ⏰ Límite: {new Date(item.horaLimite).toLocaleTimeString('es-PE', { hour: '2-digit', minute: '2-digit' })}
-          </Text>
+        {/* Nombre referencia */}
+        {item.referencia?.nombre && (
+          <Text style={s.tcRef}>📍 {item.referencia.nombre}</Text>
         )}
 
-        {siguienteEstado && (
-          <TouchableOpacity onPress={() => confirmarAccion(item, siguienteEstado)}
-            style={{ backgroundColor: COLOR.azul, borderRadius: 10, padding: 12, alignItems: 'center', marginTop: 12 }}>
-            <Text style={{ color: '#000', fontWeight: 'bold', fontSize: 14 }}>
-              {siguienteEstado === 'ASIGNADO' ? '📌 Tomar pedido' :
-               siguienteEstado === 'EN_RUTA' ? '🏍️ Ir al recojo' :
-               siguienteEstado === 'EN_RECOJO' ? '📍 Llegué al punto' :
-               siguienteEstado === 'RECOGIDO' ? '📦 Recogí muestra' :
-               siguienteEstado === 'ENTREGADO' ? '✅ Entregar' :
-               siguienteEstado === 'FALLIDO' ? '⚠️ Marcar fallido' :
-               `➡️ ${siguienteEstado.replace(/_/g, ' ')}`}
+        <Text style={s.tcType}>{item.referencia?.tipo ?? 'Muestra'}</Text>
+        <Text style={s.tcAddr}>{item.referencia?.direccion ?? ''}</Text>
+        {item.referencia?.telefono && (
+          <Text style={s.tcPhone}>📞 {item.referencia.telefono}</Text>
+        )}
+
+        {item.horaLimite && !isDone && (
+          <View style={[s.ttime, new Date(item.horaLimite) < new Date() && s.ttimeUrgent]}>
+            <Text style={[s.ttimeTxt, new Date(item.horaLimite) < new Date() && { color: C.red }]}>
+              ⏰ Límite: {new Date(item.horaLimite).toLocaleTimeString('es-PE', { hour:'2-digit', minute:'2-digit' })}
             </Text>
+          </View>
+        )}
+
+        {item.notas && !isDone && (
+          <Text style={s.notas}>📝 {item.notas}</Text>
+        )}
+
+        {!isDone && btnLabel && (
+          <TouchableOpacity
+            style={[s.abtn, { backgroundColor: btnColor }, cargando && { opacity: 0.6 }]}
+            onPress={() => avanzarEstado(item)}
+            disabled={cargando}
+            activeOpacity={0.82}
+          >
+            <Text style={s.abtnTxt}>{cargando ? 'Actualizando...' : btnLabel}</Text>
           </TouchableOpacity>
         )}
 
-        {item.notas && <Text style={{ color: COLOR.gris, fontSize: 11, marginTop: 6, fontStyle: 'italic' }}>📝 {item.notas}</Text>}
-      </TouchableOpacity>
+        {isDone && (
+          <Text style={s.doneTag}>✅ Completado · {item.horaLimite ? new Date(item.horaLimite).toLocaleTimeString('es-PE',{hour:'2-digit',minute:'2-digit'}) : ''}</Text>
+        )}
+      </View>
     );
   };
 
-  if (loading) {
-    return (
-      <View style={{ flex: 1, backgroundColor: COLOR.fondo, justifyContent: 'center', alignItems: 'center' }}>
-        <ActivityIndicator size="large" color={COLOR.azul} />
-      </View>
-    );
-  }
-
-  const pendientes = tickets.filter(t => t.estado === 'PENDIENTE');
-  const activos = tickets.filter(t => !['ENTREGADO', 'CERRADO', 'CANCELADO', 'PENDIENTE'].includes(t.estado));
-  const completados = tickets.filter(t => ['ENTREGADO', 'CERRADO'].includes(t.estado));
+  const listaCompleta = [
+    ...(activos.length > 0 ? [{ _sep: '🔵 En camino', _color: C.blue }] : []),
+    ...activos,
+    ...(pendientes.length > 0 ? [{ _sep: '⏳ Pendientes', _color: C.orange }] : []),
+    ...pendientes,
+    ...(completados.length > 0 ? [{ _sep: '✅ Completados', _color: C.green }] : []),
+    ...completados,
+  ] as any[];
 
   return (
-    <View style={{ flex: 1, backgroundColor: COLOR.fondo }}>
-      {/* Header */}
-      <View style={{ backgroundColor: '#111', paddingTop: 50, paddingBottom: 16, paddingHorizontal: 16, borderBottomWidth: 1, borderBottomColor: '#222' }}>
-        <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
-          <View>
-            <Text style={{ color: COLOR.texto, fontSize: 14 }}>👋 Hola, {user?.nombre || 'Motorizado'}</Text>
-            <Text style={{ color: COLOR.azul, fontSize: 12 }}>📍 GPS: {turnoActivo ? 'ACTIVO' : 'INACTIVO'}</Text>
+    <SafeAreaView style={s.root} edges={['top']}>
+
+      {/* HEADER */}
+      <View style={s.header}>
+        <View style={s.hTop}>
+          <View style={s.av}>
+            <Text style={s.avTxt}>{user?.nombre?.[0]?.toUpperCase() ?? 'M'}</Text>
           </View>
-          <TouchableOpacity onPress={handleLogout} style={{ backgroundColor: '#222', borderRadius: 8, padding: 8 }}>
-            <Text style={{ color: COLOR.rojo, fontSize: 12 }}>🔒 Salir</Text>
+          <View style={{ flex: 1 }}>
+            <Text style={s.hName}>{user?.nombre ?? 'Motorizado'}</Text>
+            <View style={s.gpsRow}>
+              <View style={[s.gpsDot, { backgroundColor: eActual.gpsColor }]} />
+              <Text style={[s.gpsTxt, { color: eActual.gpsColor }]}>{eActual.gpsTxt}</Text>
+            </View>
+          </View>
+          {/* Pill de estado — toca para cambiar */}
+          <TouchableOpacity
+            style={[s.estadoPill, { backgroundColor: eActual.bg, borderColor: eActual.border }]}
+            onPress={() => { setEstadoSel(estadoMoto); setEstadoModal(true); }}
+            activeOpacity={0.82}
+          >
+            <Text style={s.estadoPillIc}>{eActual.ic}</Text>
+            <Text style={[s.estadoPillTxt, { color: eActual.color }]}>{eActual.label}</Text>
           </TouchableOpacity>
         </View>
 
-        {/* Turno button */}
-        <View style={{ flexDirection: 'row', gap: 10, marginTop: 12 }}>
-          {!turnoActivo ? (
-            <TouchableOpacity onPress={iniciarTurno} disabled={turnoLoading}
-              style={{ flex: 1, backgroundColor: COLOR.verde, borderRadius: 12, padding: 14, alignItems: 'center', opacity: turnoLoading ? 0.7 : 1 }}>
-              {turnoLoading ? <ActivityIndicator color="#000" /> : <Text style={{ color: '#000', fontWeight: 'bold' }}>▶️ Iniciar turno</Text>}
-            </TouchableOpacity>
-          ) : (
-            <TouchableOpacity onPress={finalizarTurno}
-              style={{ flex: 1, backgroundColor: COLOR.rojo, borderRadius: 12, padding: 14, alignItems: 'center' }}>
-              <Text style={{ color: '#fff', fontWeight: 'bold' }}>⏹️ Fin turno</Text>
-            </TouchableOpacity>
-          )}
+        {/* Stats */}
+        <View style={s.qsRow}>
+          <View style={s.qs}>
+            <Text style={[s.qsVal, { color: C.orange }]}>{pendientes.length}</Text>
+            <Text style={s.qsLbl}>Pendientes</Text>
+          </View>
+          <View style={s.qs}>
+            <Text style={[s.qsVal, { color: C.blue }]}>{activos.length}</Text>
+            <Text style={s.qsLbl}>En camino</Text>
+          </View>
+          <View style={s.qs}>
+            <Text style={[s.qsVal, { color: C.green }]}>{completados.length}</Text>
+            <Text style={s.qsLbl}>Listas</Text>
+          </View>
         </View>
       </View>
 
-      {/* Stats */}
-      <View style={{ flexDirection: 'row', padding: 12, gap: 8 }}>
-        <View style={{ flex: 1, backgroundColor: '#1a1a1a', borderRadius: 12, padding: 12, alignItems: 'center' }}>
-          <Text style={{ color: COLOR.naranja, fontSize: 22, fontWeight: 'bold' }}>{pendientes.length}</Text>
-          <Text style={{ color: COLOR.texto2, fontSize: 11 }}>Pendientes</Text>
-        </View>
-        <View style={{ flex: 1, backgroundColor: '#1a1a1a', borderRadius: 12, padding: 12, alignItems: 'center' }}>
-          <Text style={{ color: COLOR.azul, fontSize: 22, fontWeight: 'bold' }}>{activos.length}</Text>
-          <Text style={{ color: COLOR.texto2, fontSize: 11 }}>Activos</Text>
-        </View>
-        <View style={{ flex: 1, backgroundColor: '#1a1a1a', borderRadius: 12, padding: 12, alignItems: 'center' }}>
-          <Text style={{ color: COLOR.verde, fontSize: 22, fontWeight: 'bold' }}>{completados.length}</Text>
-          <Text style={{ color: COLOR.texto2, fontSize: 11 }}>Hoy</Text>
-        </View>
+      {/* Banner de estado */}
+      <View style={[s.banner, { backgroundColor: eActual.bg }]}>
+        <Text style={s.bannerIc}>{eActual.bannerIc}</Text>
+        <Text style={[s.bannerTxt, { color: eActual.color }]}>{eActual.bannerTxt}</Text>
       </View>
 
-      {/* Tickets list */}
+      {/* Lista tickets */}
       <FlatList
-        data={tickets}
-        keyExtractor={(item) => item.id}
-        renderItem={renderTicket}
-        contentContainerStyle={{ padding: 12, paddingBottom: 100 }}
-        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={async () => { setRefreshing(true); await cargarTickets(); setRefreshing(false); }} tintColor={COLOR.azul} />}
+        data={listaCompleta}
+        keyExtractor={(item, i) => item._sep ? 'sep-' + i : item.id}
+        renderItem={({ item }) =>
+          item._sep
+            ? <Text style={[s.sep, { color: item._color }]}>{item._sep}</Text>
+            : renderTicket({ item })
+        }
+        contentContainerStyle={s.list}
+        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={C.blue} />}
         ListEmptyComponent={
-          <View style={{ alignItems: 'center', paddingTop: 60 }}>
-            <Text style={{ fontSize: 48, marginBottom: 12 }}>🏍️</Text>
-            <Text style={{ color: COLOR.texto2, fontSize: 16 }}>No hay tickets disponibles</Text>
-            <Text style={{ color: COLOR.gris, fontSize: 13, marginTop: 4 }}>Espera nuevos pedidos...</Text>
+          <View style={s.empty}>
+            <Text style={s.emptyIc}>📭</Text>
+            <Text style={s.emptyTxt}>Sin tickets asignados</Text>
+            <Text style={s.emptySub}>Jala hacia abajo para actualizar</Text>
           </View>
         }
+        ItemSeparatorComponent={() => <View style={{ height: 8 }} />}
       />
 
-      {/* Modal de confirmación */}
-      <Modal transparent visible={modalVisible} animationType="fade" onRequestClose={() => setModalVisible(false)}>
-        <View style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.7)', justifyContent: 'center', padding: 24 }}>
-          <View style={{ backgroundColor: '#1a1a1a', borderRadius: 20, padding: 24 }}>
-            <Text style={{ color: COLOR.texto, fontSize: 18, fontWeight: 'bold', marginBottom: 8 }}>Confirmar acción</Text>
-            <Text style={{ color: COLOR.texto2, fontSize: 14, marginBottom: 4 }}>Ticket: {ticketAccion?.referencia?.nombre}</Text>
-            <Text style={{ color: coloresEstado[estadoDestino || ''], fontSize: 14, fontWeight: 'bold', marginBottom: 20 }}>
-              {estadoDestino?.replace(/_/g, ' ')}
-            </Text>
+      {/* ══ MODAL ESTADO MOTO ══ */}
+      <Modal visible={estadoModal} transparent animationType="slide">
+        <View style={s.overlay}>
+          <View style={s.sheet}>
+            <View style={s.handle} />
+            <Text style={s.sheetTitle}>¿Cuál es tu estado?</Text>
+            <Text style={s.sheetSub}>La administradora verá esto en tiempo real</Text>
 
-            <View style={{ flexDirection: 'row', gap: 10 }}>
-              <TouchableOpacity onPress={() => setModalVisible(false)}
-                style={{ flex: 1, backgroundColor: '#222', borderRadius: 12, padding: 14, alignItems: 'center' }}>
-                <Text style={{ color: COLOR.texto2 }}>Cancelar</Text>
-              </TouchableOpacity>
-              <TouchableOpacity onPress={() => ticketAccion && estadoDestino && avanzarEstado(ticketAccion, estadoDestino)}
-                style={{ flex: 1, backgroundColor: COLOR.azul, borderRadius: 12, padding: 14, alignItems: 'center' }}>
-                <Text style={{ color: '#000', fontWeight: 'bold' }}>✅ Confirmar</Text>
-              </TouchableOpacity>
-            </View>
+            {(['DISPONIBLE', 'OCUPADO', 'OFF_LINE'] as EstadoMoto[]).map(key => {
+              const e = ESTADOS_MOTO[key];
+              const isSel = estadoSel === key;
+              return (
+                <TouchableOpacity
+                  key={key}
+                  style={[s.eOpt, isSel && { backgroundColor: e.bg, borderColor: e.color, borderWidth: 2 }]}
+                  onPress={() => setEstadoSel(key)}
+                  activeOpacity={0.82}
+                >
+                  <Text style={s.eOptIc}>{e.ic}</Text>
+                  <View style={{ flex: 1 }}>
+                    <Text style={s.eOptName}>{e.label}</Text>
+                    <Text style={s.eOptDesc}>
+                      {key === 'DISPONIBLE' ? 'En turno, listo para recojos' : key === 'OCUPADO' ? 'En pausa · vuelvo en unos minutos' : 'Terminé mi jornada del día'}
+                    </Text>
+                  </View>
+                  <View style={[s.eCheck, isSel && { backgroundColor: e.color, borderColor: e.color }]}>
+                    {isSel && <Text style={{ color: C.white, fontSize: 10, fontWeight: '800' }}>✓</Text>}
+                  </View>
+                </TouchableOpacity>
+              );
+            })}
+
+            <TouchableOpacity style={[s.confirmBtn, { backgroundColor: C.blue }]} onPress={confirmarEstadoMoto}>
+              <Text style={s.confirmBtnTxt}>Confirmar estado</Text>
+            </TouchableOpacity>
+            <TouchableOpacity style={s.cancelBtn} onPress={() => setEstadoModal(false)}>
+              <Text style={s.cancelBtnTxt}>Cancelar</Text>
+            </TouchableOpacity>
           </View>
         </View>
       </Modal>
-    </View>
+
+      {/* ══ MODAL REGISTRO DE RECOJO ══ */}
+      <Modal visible={registroModal} transparent animationType="slide">
+        <View style={s.overlay}>
+          <View style={[s.sheet, { maxHeight: '90%' }]}>
+            <ScrollView showsVerticalScrollIndicator={false}>
+              <View style={s.handle} />
+              <Text style={s.sheetTitle}>Registrar recojo</Text>
+              <Text style={s.sheetSub}>Opcional — completa lo que aplique</Text>
+
+              {/* Nombre referencia */}
+              <Text style={s.msec}>Nombre de referencia</Text>
+              <TextInput
+                style={s.minp}
+                value={refNombre}
+                onChangeText={setRefNombre}
+                placeholder="Ej. María López"
+                placeholderTextColor={C.grayBorder}
+              />
+
+              {/* Foto */}
+              <Text style={s.msec}>Foto de evidencia <Text style={s.optional}>(opcional)</Text></Text>
+              {!fotoUri ? (
+                <TouchableOpacity style={s.fotoBtn} onPress={tomarFoto}>
+                  <Text style={s.fotoBtnLbl}>📷 Tomar foto</Text>
+                  <Text style={s.fotoBtnSub}>Toca para abrir la cámara</Text>
+                </TouchableOpacity>
+              ) : (
+                <View style={s.fotoPreview}>
+                  <Text style={{ fontSize: 22 }}>🖼️</Text>
+                  <View style={{ flex: 1 }}>
+                    <Text style={s.fotoName}>evidencia_foto.jpg</Text>
+                    <Text style={{ fontSize: 10, color: C.gray }}>Lista para subir</Text>
+                  </View>
+                  <TouchableOpacity onPress={() => setFotoUri(null)}>
+                    <Text style={{ fontSize: 11, color: C.red, fontWeight: '700' }}>Quitar</Text>
+                  </TouchableOpacity>
+                </View>
+              )}
+
+              {/* Observaciones */}
+              <Text style={s.msec}>Observaciones <Text style={s.optional}>(opcional)</Text></Text>
+              <TextInput
+                style={[s.minp, { height: 72, textAlignVertical: 'top' }]}
+                value={observaciones}
+                onChangeText={setObservaciones}
+                placeholder="Ej. Muestra en buen estado, sin incidencias"
+                placeholderTextColor={C.grayBorder}
+                multiline
+              />
+
+              {/* Pago */}
+              <Text style={s.msec}>Pago recibido <Text style={s.optional}>(opcional)</Text></Text>
+              <View style={s.pagoGrid}>
+                {([
+                  { key: 'EFECTIVO', ic: '💵', lbl: 'Efectivo' },
+                  { key: 'YAPE', ic: '📱', lbl: 'Yape' },
+                  { key: 'TRANSFERENCIA', ic: '🏦', lbl: 'Transferencia' },
+                  { key: 'SIN_PAGO', ic: '🚫', lbl: 'Sin pago' },
+                ] as { key: MetodoPago; ic: string; lbl: string }[]).map(p => (
+                  <TouchableOpacity
+                    key={p.key}
+                    style={[s.pagoOpt, metodoPago === p.key && { backgroundColor: C.blueLight, borderColor: C.blue }]}
+                    onPress={() => setMetodoPago(p.key)}
+                    activeOpacity={0.82}
+                  >
+                    <Text style={{ fontSize: 22, marginBottom: 3 }}>{p.ic}</Text>
+                    <Text style={[s.pagoLbl, metodoPago === p.key && { color: C.blue }]}>{p.lbl}</Text>
+                  </TouchableOpacity>
+                ))}
+              </View>
+
+              {/* Monto */}
+              {metodoPago && metodoPago !== 'SIN_PAGO' && (
+                <View>
+                  <Text style={s.msec}>Monto recibido</Text>
+                  <View style={s.montoRow}>
+                    <View style={s.montoPre}><Text style={s.montoPreTxt}>S/</Text></View>
+                    <TextInput
+                      style={s.montoInp}
+                      value={monto}
+                      onChangeText={setMonto}
+                      placeholder="0.00"
+                      placeholderTextColor={C.grayBorder}
+                      keyboardType="decimal-pad"
+                    />
+                  </View>
+                </View>
+              )}
+
+              <View style={s.mActions}>
+                <TouchableOpacity style={s.mCancel} onPress={() => setRegistroModal(false)}>
+                  <Text style={s.mCancelTxt}>Cancelar</Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  style={[s.mConfirm, { backgroundColor: C.blue }, subiendo && { opacity: 0.6 }]}
+                  onPress={intentarConfirmar}
+                  disabled={subiendo}
+                >
+                  {subiendo
+                    ? <ActivityIndicator color={C.white} />
+                    : <Text style={s.mConfirmTxt}>Confirmar recojo ✓</Text>
+                  }
+                </TouchableOpacity>
+              </View>
+            </ScrollView>
+          </View>
+        </View>
+      </Modal>
+
+      {/* ══ ALERT CONFIRMACIÓN SIN EVENTUALIDADES ══ */}
+      <Modal visible={confirmModal} transparent animationType="fade">
+        <View style={[s.overlay, { alignItems: 'center', justifyContent: 'center' }]}>
+          <View style={s.alertBox}>
+            <Text style={s.alertIc}>📋</Text>
+            <Text style={s.alertTitle}>¿Seguro que no desea guardar eventualidades?</Text>
+            <Text style={s.alertBody}>
+              Si hay observaciones, fotos o pagos que registrar, puedes volver al formulario y completarlos.
+            </Text>
+            <TouchableOpacity style={[s.confirmBtn, { backgroundColor: C.blue, marginTop: 16 }]} onPress={confirmarSinEventualidades}>
+              <Text style={s.confirmBtnTxt}>Sí, confirmar recojo</Text>
+            </TouchableOpacity>
+            <TouchableOpacity style={[s.cancelBtn, { marginTop: 8 }]} onPress={volverAlFormulario}>
+              <Text style={[s.cancelBtnTxt, { color: C.text }]}>No, volver a registrar</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </Modal>
+
+    </SafeAreaView>
   );
 }
+
+const s = StyleSheet.create({
+  root: { flex:1, backgroundColor:'#F5F6F8' },
+  header: { backgroundColor:'#FFFFFF', padding:14, borderBottomWidth:1, borderBottomColor:'#E8E8E8' },
+  hTop: { flexDirection:'row', alignItems:'center', gap:10, marginBottom:12 },
+  av: { width:40, height:40, borderRadius:11, backgroundColor:'#4BBFE0', alignItems:'center', justifyContent:'center' },
+  avTxt: { fontSize:17, fontWeight:'800', color:'#fff' },
+  hName: { fontSize:14, fontWeight:'700', color:'#1a1a2e' },
+  gpsRow: { flexDirection:'row', alignItems:'center', gap:4, marginTop:2 },
+  gpsDot: { width:6, height:6, borderRadius:3 },
+  gpsTxt: { fontSize:10, fontWeight:'600' },
+  estadoPill: { flexDirection:'row', alignItems:'center', gap:4, paddingHorizontal:10, paddingVertical:6, borderRadius:20, borderWidth:1.5 },
+  estadoPillIc: { fontSize:13 },
+  estadoPillTxt: { fontSize:10, fontWeight:'800' },
+  qsRow: { flexDirection:'row', gap:8 },
+  qs: { flex:1, backgroundColor:'#F5F6F8', borderRadius:9, padding:8, alignItems:'center' },
+  qsVal: { fontSize:18, fontWeight:'800' },
+  qsLbl: { fontSize:8, fontWeight:'600', color:'#8C8C8C', textTransform:'uppercase', letterSpacing:0.5, marginTop:1 },
+  banner: { flexDirection:'row', alignItems:'center', gap:6, paddingHorizontal:14, paddingVertical:8, borderBottomWidth:1, borderBottomColor:'#E8E8E8' },
+  bannerIc: { fontSize:13 },
+  bannerTxt: { fontSize:10, fontWeight:'700' },
+  list: { padding:12, paddingBottom:32 },
+  sep: { fontSize:9, fontWeight:'800', letterSpacing:1, textTransform:'uppercase', paddingVertical:6, paddingHorizontal:2 },
+  tcard: { backgroundColor:'#fff', borderRadius:14, padding:13, borderLeftWidth:4 },
+  tcardActive: { backgroundColor:'#f0fafd' },
+  tcTop: { flexDirection:'row', justifyContent:'space-between', alignItems:'center', marginBottom:8 },
+  tcId: { fontSize:9, color:'#8C8C8C', letterSpacing:0.5, fontFamily:'monospace' },
+  badge: { paddingHorizontal:8, paddingVertical:3, borderRadius:20, borderWidth:1 },
+  badgeTxt: { fontSize:8, fontWeight:'800', letterSpacing:0.4 },
+  tcRef: { fontSize:10, fontWeight:'700', color:'#4BBFE0', marginBottom:2 },
+  tcType: { fontSize:13, fontWeight:'800', color:'#1a1a2e', marginBottom:3 },
+  tcAddr: { fontSize:10, color:'#6b7280', lineHeight:16 },
+  tcPhone: { fontSize:9, color:'#8C8C8C', marginTop:2 },
+  ttime: { alignSelf:'flex-start', backgroundColor:'#FEF9EC', borderRadius:20, paddingHorizontal:9, paddingVertical:3, marginVertical:6 },
+  ttimeUrgent: { backgroundColor:'#FEF0EF' },
+  ttimeTxt: { fontSize:9, fontWeight:'700', color:'#F39C12' },
+  notas: { fontSize:10, color:'#8C8C8C', fontStyle:'italic', marginBottom:6 },
+  abtn: { borderRadius:10, padding:12, alignItems:'center', marginTop:8 },
+  abtnTxt: { fontSize:12, fontWeight:'800', color:'#fff', letterSpacing:0.2 },
+  doneTag: { fontSize:10, fontWeight:'700', color:'#2ECC71', marginTop:8 },
+  empty: { alignItems:'center', paddingTop:60 },
+  emptyIc: { fontSize:48, marginBottom:12 },
+  emptyTxt: { fontSize:15, color:'#8C8C8C', fontWeight:'700' },
+  emptySub: { fontSize:11, color:'#ccc', marginTop:4 },
+  overlay: { flex:1, backgroundColor:'rgba(0,0,0,0.5)', justifyContent:'flex-end' },
+  sheet: { backgroundColor:'#fff', borderTopLeftRadius:20, borderTopRightRadius:20, padding:18, paddingBottom:32 },
+  handle: { width:36, height:3, backgroundColor:'#E8E8E8', borderRadius:2, alignSelf:'center', marginBottom:14 },
+  sheetTitle: { fontSize:16, fontWeight:'800', color:'#1a1a2e', marginBottom:3 },
+  sheetSub: { fontSize:11, color:'#8C8C8C', marginBottom:16 },
+  msec: { fontSize:9, fontWeight:'700', color:'#8C8C8C', textTransform:'uppercase', letterSpacing:0.8, marginTop:12, marginBottom:6 },
+  optional: { color:'#ccc', fontWeight:'400' },
+  minp: { backgroundColor:'#F5F6F8', borderWidth:1.5, borderColor:'#E8E8E8', borderRadius:9, padding:10, fontSize:12, color:'#1a1a2e' },
+  fotoBtn: { backgroundColor:'#F5F6F8', borderWidth:1.5, borderColor:'#E8E8E8', borderStyle:'dashed', borderRadius:10, padding:20, alignItems:'center' },
+  fotoBtnLbl: { fontSize:12, fontWeight:'700', color:'#8C8C8C' },
+  fotoBtnSub: { fontSize:9, color:'#ccc', marginTop:2 },
+  fotoPreview: { backgroundColor:'#EBF7FC', borderWidth:1.5, borderColor:'#c8ebf7', borderRadius:10, padding:10, flexDirection:'row', alignItems:'center', gap:10 },
+  fotoName: { fontSize:11, fontWeight:'700', color:'#4BBFE0' },
+  pagoGrid: { flexDirection:'row', flexWrap:'wrap', gap:8 },
+  pagoOpt: { width:'47%', backgroundColor:'#F5F6F8', borderWidth:1.5, borderColor:'#E8E8E8', borderRadius:10, padding:12, alignItems:'center' },
+  pagoLbl: { fontSize:10, fontWeight:'700', color:'#6b7280' },
+  montoRow: { flexDirection:'row', alignItems:'center', backgroundColor:'#F5F6F8', borderWidth:1.5, borderColor:'#E8E8E8', borderRadius:9, overflow:'hidden' },
+  montoPre: { padding:10, backgroundColor:'#E8E8E8' },
+  montoPreTxt: { fontSize:14, fontWeight:'800', color:'#8C8C8C' },
+  montoInp: { flex:1, padding:10, fontSize:16, fontWeight:'800', color:'#1a1a2e' },
+  mActions: { flexDirection:'row', gap:8, marginTop:16 },
+  mCancel: { flex:1, padding:12, borderRadius:10, borderWidth:1.5, borderColor:'#E8E8E8', alignItems:'center' },
+  mCancelTxt: { fontSize:12, fontWeight:'700', color:'#8C8C8C' },
+  mConfirm: { flex:2, padding:12, borderRadius:10, alignItems:'center' },
+  mConfirmTxt: { fontSize:12, fontWeight:'800', color:'#fff' },
+  eOpt: { flexDirection:'row', alignItems:'center', gap:12, padding:13, borderRadius:12, borderWidth:1.5, borderColor:'#E8E8E8', marginBottom:8 },
+  eOptIc: { fontSize:24, width:32, textAlign:'center' },
+  eOptName: { fontSize:13, fontWeight:'800', color:'#1a1a2e' },
+  eOptDesc: { fontSize:10, color:'#8C8C8C', marginTop:1 },
+  eCheck: { width:20, height:20, borderRadius:10, borderWidth:2, borderColor:'#E8E8E8', alignItems:'center', justifyContent:'center' },
+  confirmBtn: { borderRadius:12, padding:14, alignItems:'center', marginTop:8 },
+  confirmBtnTxt: { fontSize:14, fontWeight:'800', color:'#fff' },
+  cancelBtn: { padding:12, alignItems:'center' },
+  cancelBtnTxt: { fontSize:13, fontWeight:'700', color:'#8C8C8C' },
+  alertBox: { backgroundColor:'#fff', borderRadius:18, padding:24, margin:24, alignItems:'center' },
+  alertIc: { fontSize:40, marginBottom:8 },
+  alertTitle: { fontSize:16, fontWeight:'800', color:'#1a1a2e', textAlign:'center', lineHeight:22, marginBottom:8 },
+  alertBody: { fontSize:12, color:'#6b7280', textAlign:'center', lineHeight:18 },
+});
