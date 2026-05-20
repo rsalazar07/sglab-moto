@@ -1,0 +1,14 @@
+{
+  "cli": { "version": ">= 10.0.0" },
+  "build": {
+    "preview": {
+      "android": {
+        "buildType": "apk",
+        "env": {
+          "EXPO_PUBLIC_API_URL": "https://recojossglab.duckdns.org/api",
+          "EXPO_PUBLIC_WS_URL": "wss://recojossglab.duckdns.org"
+        }
+      }
+    }
+  }
+}
