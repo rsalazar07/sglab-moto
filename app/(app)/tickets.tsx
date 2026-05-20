@@ -207,9 +207,16 @@ export default function TicketsScreen() {
     setMonto('');
   };
 
-  // Al presionar "Confirmar recojo" en el formulario → mostrar alerta
+  // Al presionar "Confirmar recojo" en el formulario
+  // Solo pide confirmación si el usuario no ingresó ningún dato
   const intentarConfirmar = () => {
-    setConfirmModal(true);
+    const tieneData = fotoUri || refNombre.trim() || observaciones.trim();
+    if (!tieneData) {
+      setConfirmModal(true);
+    } else {
+      setRegistroModal(false);
+      completarRecojo();
+    }
   };
 
   // Presionó "Sí" en el alert → confirmar sin eventualidades
@@ -228,49 +235,54 @@ export default function TicketsScreen() {
     const id = currentTicketId.current;
     if (!id) return;
     setSubiendo(true);
+
+    // 1. Subir foto si hay
+    let fotoUrl: string | undefined;
+    if (fotoUri) {
+      try {
+        const { url } = await ticketsApi.subirEvidencia(id, fotoUri);
+        fotoUrl = url;
+      } catch (e) {
+        console.error('[completarRecojo] Error subiendo evidencia:', e);
+      }
+    }
+
+    // 2. Registrar cobro si hay pago real
+    if (metodoPago && metodoPago !== 'SIN_PAGO' && monto) {
+      try {
+        await ticketsApi.registrarCobro(id, {
+          metodo: metodoPago,
+          monto: parseFloat(monto),
+        });
+      } catch (e) {
+        console.error('[completarRecojo] Error registrando cobro:', e);
+      }
+    }
+
+    // 3. Guardar registro si hay datos
+    if (refNombre || observaciones || fotoUrl) {
+      try {
+        await ticketsApi.guardarRegistro(id, {
+          refNombre,
+          observaciones,
+          fotoUrl,
+        });
+      } catch (e) {
+        console.error('[completarRecojo] Error guardando registro:', e);
+      }
+    }
+
+    // 4. Cambiar estado a RECOGIDO — siempre ejecutar
     try {
-      // 1. Subir foto si hay
-      let fotoUrl: string | undefined;
-      if (fotoUri) {
-        try {
-          const { url } = await ticketsApi.subirEvidencia(id, fotoUri);
-          fotoUrl = url;
-        } catch (e) {
-          console.error('[completarRecojo] Error subiendo evidencia:', e);
-        }
-      }
-      // 2. Registrar cobro si hay
-      if (metodoPago && metodoPago !== 'SIN_PAGO' && monto) {
-        try {
-          await ticketsApi.registrarCobro(id, {
-            metodo: metodoPago,
-            monto: parseFloat(monto),
-          });
-        } catch (e) {
-          console.error('[completarRecojo] Error registrando cobro:', e);
-        }
-      }
-      // 3. Guardar registro general si hay datos
-      if (refNombre || observaciones || fotoUrl) {
-        try {
-          await ticketsApi.guardarRegistro(id, {
-            refNombre,
-            observaciones,
-            fotoUrl,
-          });
-        } catch (e) {
-          console.error('[completarRecojo] Error guardando registro:', e);
-        }
-      }
-      // 4. Cambiar estado a RECOGIDO
       await ticketsApi.updateEstado(id, 'RECOGIDO');
       await cargarTickets();
     } catch (e: any) {
-      Alert.alert('Error', 'No se pudo completar el recojo');
-    } finally {
-      setSubiendo(false);
-      currentTicketId.current = null;
+      const msg = e.response?.data?.message;
+      Alert.alert('Error', Array.isArray(msg) ? msg[0] : msg ?? 'No se pudo completar el recojo');
     }
+
+    setSubiendo(false);
+    currentTicketId.current = null;
   };
 
   const tomarFoto = async () => {
@@ -611,9 +623,9 @@ export default function TicketsScreen() {
         <View style={[s.overlay, { alignItems: 'center', justifyContent: 'center' }]}>
           <View style={s.alertBox}>
             <Text style={s.alertIc}>📋</Text>
-            <Text style={s.alertTitle}>¿Seguro que no desea guardar eventualidades?</Text>
+            <Text style={s.alertTitle}>¿Estás seguro de continuar?</Text>
             <Text style={s.alertBody}>
-              Si hay observaciones, fotos o pagos que registrar, puedes volver al formulario y completarlos.
+              El registro se guardará sin datos adicionales.
             </Text>
             <TouchableOpacity style={[s.confirmBtn, { backgroundColor: C.blue, marginTop: 16 }]} onPress={confirmarSinEventualidades}>
               <Text style={s.confirmBtnTxt}>Sí, confirmar recojo</Text>
