@@ -315,7 +315,7 @@ export default function TicketsScreen() {
           <Text style={s.tcRef}>📍 {item.referencia.nombre}</Text>
         )}
 
-        <Text style={s.tcType}>{item.referencia?.tipo ?? 'Muestra'}</Text>
+        <Text style={s.tcType}>{item.referencia?.nombre ?? 'Muestra'}</Text>
         <Text style={s.tcAddr}>{item.referencia?.direccion ?? ''}</Text>
         {item.referencia?.telefono && (
           <Text style={s.tcPhone}>📞 {item.referencia.telefono}</Text>
