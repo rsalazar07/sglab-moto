@@ -235,7 +235,9 @@ export default function TicketsScreen() {
         try {
           const { url } = await ticketsApi.subirEvidencia(id, fotoUri);
           fotoUrl = url;
-        } catch { /* foto opcional, continuar */ }
+        } catch (e) {
+          console.error('[completarRecojo] Error subiendo evidencia:', e);
+        }
       }
       // 2. Registrar cobro si hay
       if (metodoPago && metodoPago !== 'SIN_PAGO' && monto) {
@@ -244,7 +246,9 @@ export default function TicketsScreen() {
             metodo: metodoPago,
             monto: parseFloat(monto),
           });
-        } catch { /* cobro opcional, continuar */ }
+        } catch (e) {
+          console.error('[completarRecojo] Error registrando cobro:', e);
+        }
       }
       // 3. Guardar registro general si hay datos
       if (refNombre || observaciones || fotoUrl) {
@@ -254,7 +258,9 @@ export default function TicketsScreen() {
             observaciones,
             fotoUrl,
           });
-        } catch { /* registro opcional, continuar */ }
+        } catch (e) {
+          console.error('[completarRecojo] Error guardando registro:', e);
+        }
       }
       // 4. Cambiar estado a RECOGIDO
       await ticketsApi.updateEstado(id, 'RECOGIDO');

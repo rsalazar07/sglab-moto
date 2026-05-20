@@ -29,8 +29,7 @@ export const ticketsApi = {
     } as any);
     const { data } = await api.post<{ url: string }>(
       `/tickets/${ticketId}/evidencia`,
-      formData,
-      { headers: { 'Content-Type': 'multipart/form-data' } }
+      formData
     );
     return data;
   },
