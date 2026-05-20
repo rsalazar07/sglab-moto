@@ -56,8 +56,8 @@ function mapStatus(estado: EstadoTicket): 'pendiente' | 'pending' | 'active' | '
 // Configuración de estados del motorizado
 const ESTADOS_MOTO = {
   DISPONIBLE: { label:'Disponible', ic:'🟢', color:C.green, bg:C.greenLight, border:'#a8e6c4', gpsColor:C.green, gpsTxt:'GPS activo · En turno', bannerTxt:'En turno · Disponible para recojos', bannerIc:'✅', backendEstado:'DISPONIBLE' },
-  OCUPADO:    { label:'Refrigerio', ic:'🍽️', color:C.orange, bg:C.orangeLight, border:'#fde8a0', gpsColor:C.orange, gpsTxt:'En refrigerio · GPS activo', bannerTxt:'En refrigerio · Pausa temporal', bannerIc:'🍽️', backendEstado:'OCUPADO' },
-  OFF_LINE:   { label:'Fin de turno', ic:'🏁', color:C.red, bg:C.redLight, border:'#fecdc9', gpsColor:C.red, gpsTxt:'Turno finalizado · GPS detenido', bannerTxt:'Turno finalizado · Fuera de servicio', bannerIc:'🏁', backendEstado:'OFF_LINE' },
+  OCUPADO:    { label:'Refrigerio', ic:'🍽️', color:C.orange, bg:C.orangeLight, border:'#fde8a0', gpsColor:C.orange, gpsTxt:'En refrigerio · GPS activo', bannerTxt:'En refrigerio · Pausa temporal', bannerIc:'🍽️', backendEstado:'EN_REFRIGERIO' },
+  OFF_LINE:   { label:'Fin de turno', ic:'🏁', color:C.red, bg:C.redLight, border:'#fecdc9', gpsColor:C.red, gpsTxt:'Turno finalizado · GPS detenido', bannerTxt:'Turno finalizado · Fuera de servicio', bannerIc:'🏁', backendEstado:'OFFLINE' },
 };
 
 type EstadoMoto = 'DISPONIBLE' | 'OCUPADO' | 'OFF_LINE';
@@ -128,7 +128,7 @@ export default function TicketsScreen() {
     deactivateKeepAwake();
     setTurnoActivo(false);
     setEstadoMoto('OFF_LINE');
-    try { await api.patch(`/motorizados/me/estado`, { estado: 'OFF_LINE' }); } catch {}
+    try { await api.patch(`/motorizados/me/estado`, { estado: ESTADOS_MOTO.OFF_LINE.backendEstado }); } catch {}
   };
 
   const logout = () => {
@@ -150,18 +150,30 @@ export default function TicketsScreen() {
     if (uiStatus === 'done') return;
 
     if (uiStatus === 'active') {
-      // Mostrar modal de registro antes de confirmar recojo
-      currentTicketId.current = ticket.id;
-      resetRegistroForm();
-      setRegistroModal(true);
+      setLoadingId(ticket.id);
+      try {
+        // Si está EN_RUTA, primero avanzar a EN_RECOJO (validateFlow lo exige)
+        if (ticket.estado === 'EN_RUTA') {
+          await ticketsApi.updateEstado(ticket.id, 'EN_RECOJO');
+        }
+        // Luego abrir modal de registro
+        currentTicketId.current = ticket.id;
+        resetRegistroForm();
+        setRegistroModal(true);
+      } catch (e: any) {
+        const msg = e.response?.data?.message;
+        Alert.alert('Error', Array.isArray(msg) ? msg[0] : msg ?? 'Error al actualizar');
+      } finally {
+        setLoadingId(null);
+      }
       return;
     }
 
     if (uiStatus === 'pendiente') {
-      // PENDIENTE → TOMAR pedido (asignarse el ticket)
+      // PENDIENTE → usar endpoint tomarTicket (POST /tickets/:id/tomar)
       setLoadingId(ticket.id);
       try {
-        await ticketsApi.updateEstado(ticket.id, 'ASIGNADO');
+        await ticketsApi.tomarTicket(ticket.id);
         if (!turnoActivo) await iniciarTurno();
         await cargarTickets();
       } catch (e: any) {

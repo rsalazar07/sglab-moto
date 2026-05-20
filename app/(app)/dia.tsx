@@ -55,7 +55,7 @@ export default function DiaScreen() {
       { text: 'Cerrar sesión', style: 'destructive', onPress: async () => {
         deactivateKeepAwake();
         disconnectSocket();
-        try { await api.patch('/motorizados/me/estado', { estado: 'OFF_LINE' }); } catch {}
+        try { await api.patch('/motorizados/me/estado', { estado: 'OFFLINE' }); } catch {}
         await authApi.logout();
         clearUser();
         router.replace('/login');
