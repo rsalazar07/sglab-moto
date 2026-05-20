@@ -300,8 +300,8 @@ export default function TicketsScreen() {
 
   // Separar tickets por grupo
   const activos = tickets.filter(t => mapStatus(t.estado) === 'active');
-  const pendientes = tickets.filter(t => mapStatus(t.estado) === 'pending');
-  const disponibles = tickets.filter(t => mapStatus(t.estado) === 'pendiente');
+  const asignados = tickets.filter(t => mapStatus(t.estado) === 'pending');
+  const pendientes = tickets.filter(t => mapStatus(t.estado) === 'pendiente');
   const completados = tickets.filter(t => mapStatus(t.estado) === 'done');
 
   const eActual = ESTADOS_MOTO[estadoMoto];
@@ -323,7 +323,7 @@ export default function TicketsScreen() {
             borderColor: uiStatus === 'pendiente' ? C.blueBorder : uiStatus === 'pending' ? '#fde8a0' : uiStatus === 'active' ? C.blueBorder : '#a8e6c4',
           }]}>
             <Text style={[s.badgeTxt, { color: uiStatus === 'pendiente' ? C.blue : uiStatus === 'pending' ? C.orange : uiStatus === 'active' ? C.blue : C.green }]}>
-              {uiStatus === 'pendiente' ? 'DISPONIBLE' : uiStatus === 'pending' ? 'PENDIENTE' : uiStatus === 'active' ? 'EN CAMINO' : 'COMPLETADO ✓'}
+              {uiStatus === 'pendiente' ? 'PENDIENTE' : uiStatus === 'pending' ? 'ASIGNADO' : uiStatus === 'active' ? 'EN CAMINO' : 'COMPLETADO ✓'}
             </Text>
           </View>
         </View>
@@ -372,10 +372,10 @@ export default function TicketsScreen() {
   const listaCompleta = [
     ...(activos.length > 0 ? [{ _sep: '🔵 En camino', _color: C.blue }] : []),
     ...activos,
-    ...(disponibles.length > 0 ? [{ _sep: '📋 Disponibles', _color: C.blue }] : []),
-    ...disponibles,
-    ...(pendientes.length > 0 ? [{ _sep: '⏳ Pendientes', _color: C.orange }] : []),
+    ...(pendientes.length > 0 ? [{ _sep: '📋 Pendientes', _color: C.blue }] : []),
     ...pendientes,
+    ...(asignados.length > 0 ? [{ _sep: '⏳ Asignados', _color: C.orange }] : []),
+    ...asignados,
     ...(completados.length > 0 ? [{ _sep: '✅ Completados', _color: C.green }] : []),
     ...completados,
   ] as any[];
@@ -410,11 +410,11 @@ export default function TicketsScreen() {
         {/* Stats */}
         <View style={s.qsRow}>
           <View style={s.qs}>
-            <Text style={[s.qsVal, { color: C.blue }]}>{disponibles.length}</Text>
-            <Text style={s.qsLbl}>Disponibles</Text>
+            <Text style={[s.qsVal, { color: C.blue }]}>{pendientes.length}</Text>
+            <Text style={s.qsLbl}>Pendientes</Text>
           </View>
           <View style={s.qs}>
-            <Text style={[s.qsVal, { color: C.orange }]}>{pendientes.length}</Text>
+            <Text style={[s.qsVal, { color: C.orange }]}>{asignados.length}</Text>
             <Text style={s.qsLbl}>Asignados</Text>
           </View>
           <View style={s.qs}>
