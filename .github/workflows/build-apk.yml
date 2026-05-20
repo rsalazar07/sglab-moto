@@ -34,8 +34,12 @@ jobs:
           EXPO_PUBLIC_API_URL: ${{ vars.EXPO_PUBLIC_API_URL || 'https://recojossglab.duckdns.org/api' }}
           EXPO_PUBLIC_WS_URL: ${{ vars.EXPO_PUBLIC_WS_URL || 'wss://recojossglab.duckdns.org' }}
 
-      - name: 🏗️ Build APK with Gradle
-        run: cd android && ./gradlew assembleRelease --max-workers=2
+      - name: 🏗️ Build APK for arm64 (optimizado)
+        run: |
+          cd android
+          # Solo arm64-v8a (cubre 99% de celus modernos) - APK ~35MB
+          ./gradlew assembleRelease --max-workers=2 \
+            -Pandroid.injected.build.abiFilters=arm64-v8a
 
       - name: 📦 Upload APK
         uses: actions/upload-artifact@v4
