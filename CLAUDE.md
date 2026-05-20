@@ -1,17 +1,37 @@
 # SGLab Moto - Mobile App Expo
 
+## Repositorio GitHub
+- **Repo:** https://github.com/rsalazar07/sglab-moto (público)
+- Rama principal: `master`
+- **Token GitHub:** preguntar a r o a Hermes Agent si se necesita (no guardar en repo)
+
 ## Stack
 - Expo SDK 54 (bare/workflow)
-- Android APK via EAS (production profile)
-- Cuenta Expo: rsalazar.07 (rsalazar.07@gmail.com)
-- Project ID: a74f7a4b-3506-4ca5-beea-c86bbf61bf89
-- Build plan free agotado (~11 días para reset)
-- Último APK: https://expo.dev/artifacts/eas/qVbaFjKKnW2UVRVKnC1A4s.apk
+- Android APK via **GitHub Actions** (GRATIS, 2000 min/mes por repo público)
+- Ya NO usamos EAS Build (plan free agotado)
+- Build en servidores de GitHub, no satura el VPS
 
-## Estructura
-/home/sglab-moto/
+## Build Workflow
+- Archivo: `.github/workflows/build-apk.yml`
+- **Trigger:**
+  - Push a `master` → build automático
+  - Manual desde GitHub Actions (Workflow Dispatch)
+  - Hermes Agent también puede triggerear desde Telegram con el token
+- **Optimización:** build solo para `arm64-v8a` (APK ~35MB)
+- **Duración:** ~15-20 min
+- **Artifact:** `SGLab-Moto-APK` → contiene `app-release.apk`
+- **Descarga:** Actions > Run > Artifacts, o via API con el token
+
+## API / Backend (host en VPS)
+- `https://recojossglab.duckdns.org/api`
+- WebSocket: `wss://recojossglab.duckdns.org`
+- El build injecta estas URLs via `EXPO_PUBLIC_*` env vars
+
+## Estructura del proyecto
+```
+/home/sglab-moto/ (local) = mirror del repo
 ├── app.json          - Plugins: expo-location, expo-background-fetch, expo-task-manager, expo-camera
-├── eas.json          - production profile con env vars API_URL
+├── eas.json          - production profile con env vars API_URL (ya no se usa para builds)
 ├── babel.config.js   - expo preset
 ├── package.json      - expo-router, expo-location, socket.io-client, zustand, axios, jwt-decode
 ├── index.ts          - entrypoint expo-router
@@ -23,18 +43,20 @@
 │       ├── _layout.tsx - Tabs protegidas (Recojos | Mi día)
 │       ├── tickets.tsx - Lista tickets + GPS tracking
 │       └── dia.tsx     - Resumen del día
-└── src/
-    ├── types/index.ts      - Ticket, User, TrackingSession, EstadoTicket enum
-    ├── api/client.ts       - Axios con interceptors (API_URL + token JWT)
-    ├── api/auth.ts         - login(), getProfile()
-    ├── api/tickets.ts      - getTickets(), tomarTicket(), startTracking(), stopTracking()
-    ├── socket/socket.ts    - Socket.IO singleton con reconexión automática + auth JWT
-    ├── store/authStore.ts  - Zustand: token, user, isAuthenticated, login/logout
-    └── hooks/useTracking.ts - Core GPS hook (ver abajo)
+├── src/
+│   ├── types/index.ts      - Ticket, User, TrackingSession, EstadoTicket enum
+│   ├── api/client.ts       - Axios con interceptors (API_URL + token JWT)
+│   ├── api/auth.ts         - login(), getProfile()
+│   ├── api/tickets.ts      - getTickets(), tomarTicket(), startTracking(), stopTracking()
+│   ├── socket/socket.ts    - Socket.IO singleton con reconexión automática + auth JWT
+│   ├── store/authStore.ts  - Zustand: token, user, isAuthenticated, login/logout
+│   └── hooks/useTracking.ts - Core GPS hook
+└── .github/workflows/build-apk.yml  - Workflow GitHub Actions
+```
 
 ## useTracking.ts - Detalles clave
-- **Foreground**: watchPositionAsync con timeInterval 5000ms, envía por WebSocket 'tracking:point'
-- **Background**: TaskManager con minimumInterval 300000ms (5 min), envía por REST POST /tracking/point
+- **Foreground:** watchPositionAsync con timeInterval 5000ms, envía por WebSocket 'tracking:point'
+- **Background:** TaskManager con minimumInterval 300000ms (5 min), envía por REST POST /tracking/point
 - Auto-creación: si no hay sesión activa, backend crea automáticamente
 - Iniciar turno: startTracking() REST + inicia foreground watcher
 - Fin turno: stopTracking() REST + stopAsync + limpia todo
@@ -47,17 +69,16 @@
 - Muestra: PENDING (todos) + ASSIGNED/IN_PROGRESS del motorizado
 - Botón "Iniciar turno" / "Finalizar turno" según estado
 
-## Expo / EAS Auth
-- Cuenta: rsalazar.07 (rsalazar.sistemas@gmail.com)
-- Proyecto: @rsalazar.07/sglab-moto
-- **EXPO_TOKEN**: `UJumOFg6-_zmFDFh_AQv4NYqVQ4bgtl5PTcw3WkU`
-- Build command: `EXPO_TOKEN=UJumOFg6-_zmFDFh_AQv4NYqVQ4bgtl5PTcw3WkU npx eas build --platform android --profile production --non-interactive`
-- El token NUNCA persiste entre sesiones - siempre pasarlo como env var
-
 ## Reglas NUNCA olvidar
-1. API_URL = process.env.EXPO_PUBLIC_API_URL (definido en eas.json como 'https://recojossglab.duckdns.org')
+1. API_URL = process.env.EXPO_PUBLIC_API_URL (definido en el workflow como 'https://recojossglab.duckdns.org/api')
 2. WebSocket se autentica con token JWT en auth: {token}
 3. Foreground y background son SEPARADOS - no mezclar
 4. NO detener tracking al cerrar app - solo "Fin turno" explícito
 5. "Tomar pedido" sin turno → iniciar tracking automáticamente
-6. APK builds: Siempre usar EXPO_TOKEN antes del comando
+6. Si necesitas rebuild: push a master o trigger workflow manual
+
+## Estado del APK
+- Último build exitoso ✅ APK ~86MB (universal, sin filtro arm64)
+- Próximo build: ~35MB (solo arm64, optimizado)
+- Firmado con debug keystore (instalable en cualquier celular)
+- Para producción formal: generar keystore propio y configurar firma
