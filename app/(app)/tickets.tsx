@@ -34,17 +34,20 @@ const SIGUIENTE: Partial<Record<EstadoTicket, EstadoTicket>> = {
 };
 
 const BOTON_LABEL: Partial<Record<string, string>> = {
+  pendiente: '📋  Tomar pedido',
   pending: '🏍️  Voy ahora',
   active:  '🧪  Ya recogí la muestra',
 };
 
 const BOTON_COLOR: Record<string, string> = {
+  pendiente: C.blue,
   pending: C.orange,
   active:  C.blue,
 };
 
 // Mapeo de estado backend → UI
-function mapStatus(estado: EstadoTicket): 'pending' | 'active' | 'done' {
+function mapStatus(estado: EstadoTicket): 'pendiente' | 'pending' | 'active' | 'done' {
+  if (['PENDIENTE'].includes(estado)) return 'pendiente';
   if (['ASIGNADO'].includes(estado)) return 'pending';
   if (['EN_RUTA','EN_RECOJO','RECOGIDO'].includes(estado)) return 'active';
   return 'done';
@@ -154,7 +157,23 @@ export default function TicketsScreen() {
       return;
     }
 
-    // pending → EN_RUTA directo
+    if (uiStatus === 'pendiente') {
+      // PENDIENTE → TOMAR pedido (asignarse el ticket)
+      setLoadingId(ticket.id);
+      try {
+        await ticketsApi.updateEstado(ticket.id, 'ASIGNADO');
+        if (!turnoActivo) await iniciarTurno();
+        await cargarTickets();
+      } catch (e: any) {
+        const msg = e.response?.data?.message;
+        Alert.alert('Error', Array.isArray(msg) ? msg[0] : msg ?? 'No se pudo tomar el pedido');
+      } finally {
+        setLoadingId(null);
+      }
+      return;
+    }
+
+    // pending (ASIGNADO) → EN_RUTA
     setLoadingId(ticket.id);
     try {
       await ticketsApi.updateEstado(ticket.id, 'EN_RUTA');
@@ -264,6 +283,7 @@ export default function TicketsScreen() {
   // Separar tickets por grupo
   const activos = tickets.filter(t => mapStatus(t.estado) === 'active');
   const pendientes = tickets.filter(t => mapStatus(t.estado) === 'pending');
+  const disponibles = tickets.filter(t => mapStatus(t.estado) === 'pendiente');
   const completados = tickets.filter(t => mapStatus(t.estado) === 'done');
 
   const eActual = ESTADOS_MOTO[estadoMoto];
@@ -274,18 +294,18 @@ export default function TicketsScreen() {
     const btnLabel = BOTON_LABEL[uiStatus];
     const btnColor = BOTON_COLOR[uiStatus];
     const cargando = loadingId === item.id;
-    const borderColor = uiStatus === 'pending' ? C.orange : uiStatus === 'active' ? C.blue : C.green;
+    const borderColor = uiStatus === 'pendiente' ? C.blue : uiStatus === 'pending' ? C.orange : uiStatus === 'active' ? C.blue : C.green;
 
     return (
-      <View style={[s.tcard, { borderLeftColor: borderColor }, uiStatus === 'active' && s.tcardActive]}>
+      <View style={[s.tcard, { borderLeftColor: borderColor }, (uiStatus === 'active' || uiStatus === 'pendiente') && s.tcardActive]}>
         <View style={s.tcTop}>
           <Text style={s.tcId}>#{item.id.slice(-6).toUpperCase()}</Text>
           <View style={[s.badge, {
-            backgroundColor: uiStatus === 'pending' ? C.orangeLight : uiStatus === 'active' ? C.blueLight : C.greenLight,
-            borderColor: uiStatus === 'pending' ? '#fde8a0' : uiStatus === 'active' ? C.blueBorder : '#a8e6c4',
+            backgroundColor: uiStatus === 'pendiente' ? C.blueLight : uiStatus === 'pending' ? C.orangeLight : uiStatus === 'active' ? C.blueLight : C.greenLight,
+            borderColor: uiStatus === 'pendiente' ? C.blueBorder : uiStatus === 'pending' ? '#fde8a0' : uiStatus === 'active' ? C.blueBorder : '#a8e6c4',
           }]}>
-            <Text style={[s.badgeTxt, { color: uiStatus === 'pending' ? C.orange : uiStatus === 'active' ? C.blue : C.green }]}>
-              {uiStatus === 'pending' ? 'PENDIENTE' : uiStatus === 'active' ? 'EN CAMINO' : 'COMPLETADO ✓'}
+            <Text style={[s.badgeTxt, { color: uiStatus === 'pendiente' ? C.blue : uiStatus === 'pending' ? C.orange : uiStatus === 'active' ? C.blue : C.green }]}>
+              {uiStatus === 'pendiente' ? 'DISPONIBLE' : uiStatus === 'pending' ? 'PENDIENTE' : uiStatus === 'active' ? 'EN CAMINO' : 'COMPLETADO ✓'}
             </Text>
           </View>
         </View>
@@ -334,6 +354,8 @@ export default function TicketsScreen() {
   const listaCompleta = [
     ...(activos.length > 0 ? [{ _sep: '🔵 En camino', _color: C.blue }] : []),
     ...activos,
+    ...(disponibles.length > 0 ? [{ _sep: '📋 Disponibles', _color: C.blue }] : []),
+    ...disponibles,
     ...(pendientes.length > 0 ? [{ _sep: '⏳ Pendientes', _color: C.orange }] : []),
     ...pendientes,
     ...(completados.length > 0 ? [{ _sep: '✅ Completados', _color: C.green }] : []),
@@ -370,8 +392,12 @@ export default function TicketsScreen() {
         {/* Stats */}
         <View style={s.qsRow}>
           <View style={s.qs}>
+            <Text style={[s.qsVal, { color: C.blue }]}>{disponibles.length}</Text>
+            <Text style={s.qsLbl}>Disponibles</Text>
+          </View>
+          <View style={s.qs}>
             <Text style={[s.qsVal, { color: C.orange }]}>{pendientes.length}</Text>
-            <Text style={s.qsLbl}>Pendientes</Text>
+            <Text style={s.qsLbl}>Asignados</Text>
           </View>
           <View style={s.qs}>
             <Text style={[s.qsVal, { color: C.blue }]}>{activos.length}</Text>
