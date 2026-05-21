@@ -13,9 +13,14 @@ export interface Ticket {
   id: string;
   estado: EstadoTicket;
   prioridad: 'ALTA' | 'MEDIA' | 'BAJA';
+  tipoMuestra?: string;
+  tipo?: string;
+  telefonoContacto?: string;
+  direccionRecojo?: string;
   referencia: {
     id: string;
     nombre: string;
+    nombreComercial?: string;
     direccion: string;
     latitud?: number;
     longitud?: number;

@@ -2,7 +2,7 @@ import { useEffect, useState, useCallback, useRef } from 'react';
 import {
   View, Text, FlatList, TouchableOpacity, StyleSheet,
   RefreshControl, Alert, Modal, TextInput, ScrollView,
-  ActivityIndicator, Image,
+  ActivityIndicator, Image, Linking,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { activateKeepAwakeAsync, deactivateKeepAwake } from 'expo-keep-awake';
@@ -406,6 +406,16 @@ export default function TicketsScreen() {
 
   const eActual = config?.estadosMoto?.[estadoMoto] || {};
 
+  // Labels para tickets completados según su estado real
+  const DONE_LABELS: Record<string, string> = {
+    RECOGIDO: '🟣 Recogido',
+    EN_LABORATORIO: '🧪 En laboratorio',
+    ENTREGADO: '✅ Entregado',
+    CERRADO: '✅ Cerrado',
+    CANCELADO: '❌ Cancelado',
+    FALLIDO: '❌ Fallido',
+  };
+
   const renderTicket = ({ item }: { item: Ticket }) => {
     const tf2 = config?.ticketFlow || {};
     const uiStatus = tf2[item.estado] || 'done';
@@ -445,10 +455,12 @@ export default function TicketsScreen() {
           <Text style={s.tcRef}>📍 {item.referencia.nombre}</Text>
         )}
 
-        <Text style={s.tcType}>{item.referencia?.nombre ?? 'Muestra'}</Text>
+        <Text style={s.tcType}>{item.tipoMuestra || item.referencia?.nombreComercial || item.referencia?.nombre || 'Muestra'}</Text>
         <Text style={s.tcAddr}>{item.referencia?.direccion ?? ''}</Text>
         {item.referencia?.telefono && (
-          <Text style={s.tcPhone}>📞 {item.referencia.telefono}</Text>
+          <TouchableOpacity style={{ flexDirection:'row', alignItems:'center', gap:4, marginTop:2 }} onPress={() => Linking.openURL(`tel:${item.referencia?.telefono}`)}>
+            <Text style={s.tcPhone}>📞 {item.referencia.telefono}</Text>
+          </TouchableOpacity>
         )}
 
         {item.horaLimite && !isDone && (
@@ -476,7 +488,7 @@ export default function TicketsScreen() {
 
         {isDone && (
           <View>
-            <Text style={[s.doneTag, { color: CC.green }]}>✅ Completado · {item.horaLimite ? new Date(item.horaLimite).toLocaleTimeString('es-PE',{hour:'2-digit',minute:'2-digit'}) : ''}</Text>
+            <Text style={[s.doneTag, { color: CC.green }]}>{DONE_LABELS[item.estado] || '✅ Completado'} · {item.horaLimite ? new Date(item.horaLimite).toLocaleTimeString('es-PE',{hour:'2-digit',minute:'2-digit'}) : ''}</Text>
             {flowCache[item.id]?.boton && (
               <TouchableOpacity
                 style={[s.abtn, { backgroundColor: flowCache[item.id].boton.color || CC.blue }, cargando && { opacity: 0.6 }]}
