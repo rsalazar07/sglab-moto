@@ -7,6 +7,7 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { activateKeepAwakeAsync, deactivateKeepAwake } from 'expo-keep-awake';
 import * as ImagePicker from 'expo-image-picker';
+import * as FileSystem from 'expo-file-system';
 import { ticketsApi } from '../../src/api/tickets';
 import { useTracking } from '../../src/hooks/useTracking';
 import { useAuthStore } from '../../src/store/authStore';
@@ -286,16 +287,20 @@ export default function TicketsScreen() {
     const id = currentTicketId.current;
     if (!id) return;
     setSubiendo(true);
+    let registroBase64: string | undefined;
 
-    // 1. Subir foto si hay
+    // 1. Subir foto si hay (como base64)
     let fotoUrl: string | undefined;
     if (fotoUri) {
       try {
-        const { url } = await ticketsApi.subirEvidencia(id, fotoUri);
-        fotoUrl = url;
+        const base64 = await FileSystem.readAsStringAsync(fotoUri, {
+          encoding: FileSystem.EncodingType.Base64,
+        });
+        // Enviar base64 en el registro en vez de subir foto aparte
+        registroBase64 = base64;
       } catch (e) {
-        console.error('[completarRecojo] Error subiendo evidencia:', e);
-        log('ERROR', 'completarRecojo', `subirEvidencia: ${e instanceof Error ? e.message : String(e)}`);
+        console.error('[completarRecojo] Error leyendo foto como base64:', e);
+        log('ERROR', 'completarRecojo', `leerFotoBase64: ${e instanceof Error ? e.message : String(e)}`);
       }
     }
 
@@ -323,12 +328,12 @@ export default function TicketsScreen() {
         console.error('[completarRecojo] Error guardando registro vacío:', e);
         log('ERROR', 'completarRecojo', `guardarRegistro(sinInfo): ${e instanceof Error ? e.message : String(e)}`);
       }
-    } else if (refNombre || observaciones || fotoUrl) {
+    } else if (refNombre || observaciones || registroBase64) {
       try {
         await ticketsApi.guardarRegistro(id, {
           refNombre,
           observaciones,
-          fotoUrl,
+          fotoBase64: registroBase64,
         });
       } catch (e) {
         console.error('[completarRecojo] Error guardando registro:', e);
@@ -343,7 +348,7 @@ export default function TicketsScreen() {
       // Mostrar mensaje de éxito según el caso
       if (sinInfo) {
         Alert.alert('✅ Recojo completado', 'El registro se guardó sin información adicional.');
-      } else if (fotoUri || refNombre || observaciones || (metodoPago && metodoPago !== 'SIN_PAGO')) {
+      } else if (registroBase64 || refNombre || observaciones || (metodoPago && metodoPago !== 'SIN_PAGO')) {
         Alert.alert('✅ Registro guardado', 'Los datos del recojo se guardaron correctamente.');
       } else {
         Alert.alert('✅ Recojo completado', 'El ticket se marcó como recogido.');
