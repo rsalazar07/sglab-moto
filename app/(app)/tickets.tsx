@@ -27,55 +27,21 @@ const C = {
   white:'#FFFFFF',
 };
 
-const SIGUIENTE: Partial<Record<EstadoTicket, EstadoTicket>> = {
-  ASIGNADO: 'EN_RUTA',
-  EN_RUTA: 'EN_RECOJO',
-  EN_RECOJO: 'RECOGIDO',
-  RECOGIDO: 'ENTREGADO',
-};
-
-const BOTON_LABEL: Partial<Record<string, string>> = {
-  pendiente: '📋  Tomar pedido',
-  pending: '🏍️  Voy ahora',
-  active:  '🧪  Ya recogí la muestra',
-};
-
-const BOTON_COLOR: Record<string, string> = {
-  pendiente: C.blue,
-  pending: C.orange,
-  active:  C.blue,
-};
-
-// Mapeo de estado backend → UI
-function mapStatus(estado: EstadoTicket): 'pendiente' | 'pending' | 'active' | 'done' {
-  if (['PENDIENTE'].includes(estado)) return 'pendiente';
-  if (['ASIGNADO'].includes(estado)) return 'pending';
-  if (['EN_RUTA','EN_RECOJO'].includes(estado)) return 'active';
-  return 'done';
-}
-
-// Configuración de estados del motorizado
-const ESTADOS_MOTO = {
-  DISPONIBLE: { label:'Disponible', ic:'🟢', color:C.green, bg:C.greenLight, border:'#a8e6c4', gpsColor:C.green, gpsTxt:'GPS activo · En turno', bannerTxt:'En turno · Disponible para recojos', bannerIc:'✅', backendEstado:'DISPONIBLE' },
-  OCUPADO:    { label:'Refrigerio', ic:'🍽️', color:C.orange, bg:C.orangeLight, border:'#fde8a0', gpsColor:C.orange, gpsTxt:'En refrigerio · GPS activo', bannerTxt:'En refrigerio · Pausa temporal', bannerIc:'🍽️', backendEstado:'EN_REFRIGERIO' },
-  OFF_LINE:   { label:'Fin de turno', ic:'🏁', color:C.red, bg:C.redLight, border:'#fecdc9', gpsColor:C.red, gpsTxt:'Turno finalizado · GPS detenido', bannerTxt:'Turno finalizado · Fuera de servicio', bannerIc:'🏁', backendEstado:'OFFLINE' },
-};
-
-type EstadoMoto = 'DISPONIBLE' | 'OCUPADO' | 'OFF_LINE';
 type MetodoPago = 'EFECTIVO' | 'YAPE' | 'TRANSFERENCIA' | 'SIN_PAGO';
 
 export default function TicketsScreen() {
   const user = useAuthStore((s) => s.user);
   const clearUser = useAuthStore((s) => s.clearUser);
+  const [config, setConfig] = useState<any>(null);
   const [tickets, setTickets] = useState<Ticket[]>([]);
   const [refreshing, setRefreshing] = useState(false);
   const [turnoActivo, setTurnoActivo] = useState(false);
   const [loadingId, setLoadingId] = useState<string | null>(null);
-  const [estadoMoto, setEstadoMoto] = useState<EstadoMoto>('DISPONIBLE');
+  const [estadoMoto, setEstadoMoto] = useState<string>('DISPONIBLE');
 
   // Modales
   const [estadoModal, setEstadoModal] = useState(false);
-  const [estadoSel, setEstadoSel] = useState<EstadoMoto>('DISPONIBLE');
+  const [estadoSel, setEstadoSel] = useState<string>('DISPONIBLE');
   const [registroModal, setRegistroModal] = useState(false);
   const [confirmModal, setConfirmModal] = useState(false);
 
@@ -100,8 +66,18 @@ export default function TicketsScreen() {
     }
   }, []);
 
+  const fetchConfig = useCallback(async () => {
+    try {
+      const res = await api.get('/motorizados/config');
+      setConfig(res.data);
+    } catch (e) {
+      log('WARN', 'config', `Error fetching config: ${e instanceof Error ? e.message : String(e)}`);
+    }
+  }, []);
+
   useEffect(() => {
     cargarTickets();
+    fetchConfig();
     const initSocket = async () => {
       const socket = await getSocket();
       // Limpiar listeners previos antes de agregar nuevos (evita duplicados)
@@ -139,7 +115,7 @@ export default function TicketsScreen() {
     deactivateKeepAwake();
     setTurnoActivo(false);
     setEstadoMoto('OFF_LINE');
-    try { await api.patch(`/motorizados/me/estado`, { estado: ESTADOS_MOTO.OFF_LINE.backendEstado }); } catch { log('WARN', 'turno', 'Error al finalizar estado'); }
+    try { await api.patch(`/motorizados/me/estado`, { estado: config?.estadosMoto?.OFF_LINE?.backendEstado || 'OFFLINE' }); } catch { log('WARN', 'turno', 'Error al finalizar estado'); }
   };
 
   const logout = () => {
@@ -157,59 +133,95 @@ export default function TicketsScreen() {
 
   // Avanzar estado de ticket
   const avanzarEstado = async (ticket: Ticket) => {
-    const uiStatus = mapStatus(ticket.estado);
+    const tf = config?.ticketFlow || {};
+    const uiStatus = tf[ticket.estado] || 'done';
     if (uiStatus === 'done') return;
 
-    if (uiStatus === 'active') {
-      setLoadingId(ticket.id);
-      try {
-        // Si está EN_RUTA, primero avanzar a EN_RECOJO (validateFlow lo exige)
-        if (ticket.estado === 'EN_RUTA') {
-          await ticketsApi.updateEstado(ticket.id, 'EN_RECOJO');
+    try {
+      // Obtener flow del backend
+      const flowRes = await api.get(`/tickets/${ticket.id}/flow`);
+      const flow = flowRes.data;
+      const btn = flow.boton;
+
+      if (!btn) return;
+
+      if (btn.accion === 'tomarTicket') {
+        setLoadingId(ticket.id);
+        try {
+          await ticketsApi.tomarTicket(ticket.id);
+          if (!turnoActivo) await iniciarTurno();
+          await cargarTickets();
+        } catch (e: any) {
+          const msg = e.response?.data?.message;
+          log('ERROR', 'avanzarEstado', `tomarTicket: ${e?.response?.data ? JSON.stringify(e.response.data) : e?.message || 'unknown'}`);
+          Alert.alert('Error', Array.isArray(msg) ? msg[0] : msg ?? 'No se pudo tomar el pedido');
+        } finally { setLoadingId(null); }
+        return;
+      }
+
+      if (btn.abreModal) {
+        // EN_RUTA o EN_RECOJO → abrir modal de registro
+        if (ticket.estado === 'EN_RUTA' && btn.body) {
+          await api.post(btn.endpoint!, btn.body);
         }
-        // Luego abrir modal de registro
         currentTicketId.current = ticket.id;
         resetRegistroForm();
         setRegistroModal(true);
-      } catch (e: any) {
-        const msg = e.response?.data?.message;
-        log('ERROR', 'avanzarEstado', `EN_RECOJO: ${e?.response?.data ? JSON.stringify(e.response.data) : e?.message || 'unknown'}`);
-        Alert.alert('Error', Array.isArray(msg) ? msg[0] : msg ?? 'Error al actualizar');
-      } finally {
-        setLoadingId(null);
+        return;
       }
-      return;
-    }
 
-    if (uiStatus === 'pendiente') {
-      // PENDIENTE → usar endpoint tomarTicket (POST /tickets/:id/tomar)
+      // Cualquier otra acción: llamar endpoint con body si existe
       setLoadingId(ticket.id);
       try {
-        await ticketsApi.tomarTicket(ticket.id);
+        await (btn.body
+          ? api.post(btn.endpoint!, btn.body)
+          : api.post(btn.endpoint!));
         if (!turnoActivo) await iniciarTurno();
         await cargarTickets();
       } catch (e: any) {
         const msg = e.response?.data?.message;
-        log('ERROR', 'avanzarEstado', `tomarTicket: ${e?.response?.data ? JSON.stringify(e.response.data) : e?.message || 'unknown'}`);
-        Alert.alert('Error', Array.isArray(msg) ? msg[0] : msg ?? 'No se pudo tomar el pedido');
-      } finally {
-        setLoadingId(null);
-      }
-      return;
-    }
-
-    // pending (ASIGNADO) → EN_RUTA
-    setLoadingId(ticket.id);
-    try {
-      await ticketsApi.updateEstado(ticket.id, 'EN_RUTA');
-      if (!turnoActivo) await iniciarTurno();
-      await cargarTickets();
+        log('ERROR', 'avanzarEstado', `${btn.accion}: ${e?.response?.data ? JSON.stringify(e.response.data) : e?.message || 'unknown'}`);
+        Alert.alert('Error', Array.isArray(msg) ? msg[0] : msg ?? 'Error al actualizar');
+      } finally { setLoadingId(null); }
     } catch (e: any) {
-      const msg = e.response?.data?.message;
-      log('ERROR', 'avanzarEstado', `EN_RUTA: ${e?.response?.data ? JSON.stringify(e.response.data) : e?.message || 'unknown'}`);
-      Alert.alert('Error', Array.isArray(msg) ? msg[0] : msg ?? 'No se pudo actualizar');
-    } finally {
-      setLoadingId(null);
+      // Fallback: comportamiento antiguo
+      log('WARN', 'avanzarEstado', `Flow API error, using fallback: ${e?.message}`);
+      if (uiStatus === 'active') {
+        setLoadingId(ticket.id);
+        try {
+          if (ticket.estado === 'EN_RUTA') {
+            await ticketsApi.updateEstado(ticket.id, 'EN_RECOJO');
+          }
+          currentTicketId.current = ticket.id;
+          resetRegistroForm();
+          setRegistroModal(true);
+        } catch (err: any) {
+          const msg = err.response?.data?.message;
+          Alert.alert('Error', Array.isArray(msg) ? msg[0] : msg ?? 'Error al actualizar');
+        } finally { setLoadingId(null); }
+        return;
+      }
+      if (uiStatus === 'pendiente') {
+        setLoadingId(ticket.id);
+        try {
+          await ticketsApi.tomarTicket(ticket.id);
+          if (!turnoActivo) await iniciarTurno();
+          await cargarTickets();
+        } catch (err: any) {
+          const msg = err.response?.data?.message;
+          Alert.alert('Error', Array.isArray(msg) ? msg[0] : msg ?? 'No se pudo tomar el pedido');
+        } finally { setLoadingId(null); }
+        return;
+      }
+      setLoadingId(ticket.id);
+      try {
+        await ticketsApi.updateEstado(ticket.id, 'EN_RUTA');
+        if (!turnoActivo) await iniciarTurno();
+        await cargarTickets();
+      } catch (err: any) {
+        const msg = err.response?.data?.message;
+        Alert.alert('Error', Array.isArray(msg) ? msg[0] : msg ?? 'No se pudo actualizar');
+      } finally { setLoadingId(null); }
     }
   };
 
@@ -337,28 +349,41 @@ export default function TicketsScreen() {
   const confirmarEstadoMoto = async () => {
     setEstadoModal(false);
     setEstadoMoto(estadoSel);
-    const e = ESTADOS_MOTO[estadoSel];
+    const e = config?.estadosMoto?.[estadoSel] || {};
     if (estadoSel === 'OFF_LINE') {
       await finalizarTurno();
     } else if (!turnoActivo) {
       await iniciarTurno();
     }
-    try { await api.patch(`/motorizados/me/estado`, { estado: e.backendEstado }); } catch { log('WARN', 'turno', 'Error al confirmar estado moto'); }
+    try { await api.patch(`/motorizados/me/estado`, { estado: e.backendEstado || estadoSel }); } catch { log('WARN', 'turno', 'Error al confirmar estado moto'); }
   };
 
   // Separar tickets por grupo
-  const activos = tickets.filter(t => mapStatus(t.estado) === 'active');
-  const asignados = tickets.filter(t => mapStatus(t.estado) === 'pending');
-  const pendientes = tickets.filter(t => mapStatus(t.estado) === 'pendiente');
-  const completados = tickets.filter(t => mapStatus(t.estado) === 'done');
+  const tf = config?.ticketFlow || {};
+  const activos = tickets.filter(t => (tf[t.estado] || 'done') === 'active');
+  const asignados = tickets.filter(t => (tf[t.estado] || 'done') === 'pending');
+  const pendientes = tickets.filter(t => (tf[t.estado] || 'done') === 'pendiente');
+  const completados = tickets.filter(t => (tf[t.estado] || 'done') === 'done');
 
-  const eActual = ESTADOS_MOTO[estadoMoto];
+  const eActual = config?.estadosMoto?.[estadoMoto] || {};
 
   const renderTicket = ({ item }: { item: Ticket }) => {
-    const uiStatus = mapStatus(item.estado);
+    const tf2 = config?.ticketFlow || {};
+    const uiStatus = tf2[item.estado] || 'done';
     const isDone = uiStatus === 'done';
-    const btnLabel = BOTON_LABEL[uiStatus];
-    const btnColor = BOTON_COLOR[uiStatus];
+    // Labels y colores desde el config del VPS
+    const UI_LABELS: Record<string, string> = {
+      pendiente: '📋  Tomar pedido',
+      pending: '🏍️  Voy ahora',
+      active:  '🧪  Ya recogí la muestra',
+    };
+    const UI_COLORS: Record<string, string> = {
+      pendiente: C.blue,
+      pending: C.orange,
+      active:  C.blue,
+    };
+    const btnLabel = UI_LABELS[uiStatus];
+    const btnColor = UI_COLORS[uiStatus];
     const cargando = loadingId === item.id;
     const borderColor = uiStatus === 'pendiente' ? C.blue : uiStatus === 'pending' ? C.orange : uiStatus === 'active' ? C.blue : C.green;
 
@@ -511,8 +536,8 @@ export default function TicketsScreen() {
             <Text style={s.sheetTitle}>¿Cuál es tu estado?</Text>
             <Text style={s.sheetSub}>La administradora verá esto en tiempo real</Text>
 
-            {(['DISPONIBLE', 'OCUPADO', 'OFF_LINE'] as EstadoMoto[]).map(key => {
-              const e = ESTADOS_MOTO[key];
+            {Object.keys(config?.estadosMoto || {}).map(key => {
+              const e = config?.estadosMoto?.[key] || {};
               const isSel = estadoSel === key;
               return (
                 <TouchableOpacity
@@ -523,9 +548,9 @@ export default function TicketsScreen() {
                 >
                   <Text style={s.eOptIc}>{e.ic}</Text>
                   <View style={{ flex: 1 }}>
-                    <Text style={s.eOptName}>{e.label}</Text>
+                    <Text style={s.eOptName}>{e.label || key}</Text>
                     <Text style={s.eOptDesc}>
-                      {key === 'DISPONIBLE' ? 'En turno, listo para recojos' : key === 'OCUPADO' ? 'En pausa · vuelvo en unos minutos' : 'Terminé mi jornada del día'}
+                      {key === 'DISPONIBLE' ? 'En turno, listo para recojos' : key === 'OCUPADO' ? 'En pausa · vuelvo en unos minutos' : key === 'OFF_LINE' ? 'Terminé mi jornada del día' : ''}
                     </Text>
                   </View>
                   <View style={[s.eCheck, isSel && { backgroundColor: e.color, borderColor: e.color }]}>
