@@ -98,7 +98,7 @@ export default function DiaScreen() {
             <Text style={{ color: C.blue }}>Lab's</Text>
           </Text>
         </View>
-        <Text style={d.title}>Mi día</Text>
+        <Text style={d.title}>{dash?.tabTitleMiDia || 'Mi día'}</Text>
         <Text style={d.sub}>{fechaFmt}</Text>
       </View>
 
