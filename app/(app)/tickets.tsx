@@ -360,6 +360,9 @@ export default function TicketsScreen() {
 
   // Separar tickets por grupo
   const tf = config?.ticketFlow || {};
+  const CC = config?.dashboard?.colors || C;
+  const badgeLabels = config?.dashboard?.ticketBadgeLabels || {};
+  const statsLbls = config?.dashboard?.quickStatsLabels || {};
   const activos = tickets.filter(t => (tf[t.estado] || 'done') === 'active');
   const asignados = tickets.filter(t => (tf[t.estado] || 'done') === 'pending');
   const pendientes = tickets.filter(t => (tf[t.estado] || 'done') === 'pendiente');
@@ -372,7 +375,6 @@ export default function TicketsScreen() {
     const uiStatus = tf2[item.estado] || 'done';
     const isDone = uiStatus === 'done';
     // Labels y colores desde el config del VPS
-    const CC = config?.dashboard?.colors || C;
     const UI_LABELS: Record<string, string> = {
       pendiente: '📋  Tomar pedido',
       pending: '🏍️  Voy ahora',
@@ -394,10 +396,10 @@ export default function TicketsScreen() {
           <Text style={s.tcId}>#{item.id.slice(-6).toUpperCase()}</Text>
           <View style={[s.badge, {
             backgroundColor: uiStatus === 'pendiente' ? CC.blueLight : uiStatus === 'pending' ? CC.orangeLight : uiStatus === 'active' ? CC.blueLight : CC.greenLight,
-            borderColor: uiStatus === 'pendiente' ? CC.blue || C.blueBorder : uiStatus === 'pending' ? CC.orange || '#fde8a0' : uiStatus === 'active' ? CC.blue || C.blueBorder : '#a8e6c4',
+            borderColor: uiStatus === 'pendiente' ? CC.blue || C.blueBorder : uiStatus === 'pending' ? CC.orange || '#fde8a0' : uiStatus === 'active' ? CC.blue || C.blueBorder : CC.greenLight || '#a8e6c4',
           }]}>
             <Text style={[s.badgeTxt, { color: uiStatus === 'pendiente' ? CC.blue : uiStatus === 'pending' ? CC.orange : uiStatus === 'active' ? CC.blue : CC.green }]}>
-              {uiStatus === 'pendiente' ? 'PENDIENTE' : uiStatus === 'pending' ? 'ASIGNADO' : uiStatus === 'active' ? 'EN CAMINO' : 'COMPLETADO ✓'}
+              {badgeLabels[uiStatus] || (uiStatus === 'pendiente' ? 'PENDIENTE' : uiStatus === 'pending' ? 'ASIGNADO' : uiStatus === 'active' ? 'EN CAMINO' : 'COMPLETADO ✓')}
             </Text>
           </View>
         </View>
@@ -437,20 +439,20 @@ export default function TicketsScreen() {
         )}
 
         {isDone && (
-          <Text style={s.doneTag}>✅ Completado · {item.horaLimite ? new Date(item.horaLimite).toLocaleTimeString('es-PE',{hour:'2-digit',minute:'2-digit'}) : ''}</Text>
+          <Text style={[s.doneTag, { color: CC.green }]}>✅ Completado · {item.horaLimite ? new Date(item.horaLimite).toLocaleTimeString('es-PE',{hour:'2-digit',minute:'2-digit'}) : ''}</Text>
         )}
       </View>
     );
   };
 
   const listaCompleta = [
-    ...(activos.length > 0 ? [{ _sep: '🔵 En camino', _color: C.blue }] : []),
+    ...(activos.length > 0 ? [{ _sep: '🔵 En camino', _color: CC.blue }] : []),
     ...activos,
-    ...(pendientes.length > 0 ? [{ _sep: '📋 Pendientes', _color: C.blue }] : []),
+    ...(pendientes.length > 0 ? [{ _sep: '📋 Pendientes', _color: CC.blue }] : []),
     ...pendientes,
-    ...(asignados.length > 0 ? [{ _sep: '⏳ Asignados', _color: C.orange }] : []),
+    ...(asignados.length > 0 ? [{ _sep: '⏳ Asignados', _color: CC.orange }] : []),
     ...asignados,
-    ...(completados.length > 0 ? [{ _sep: '✅ Completados', _color: C.green }] : []),
+    ...(completados.length > 0 ? [{ _sep: '✅ Completados', _color: CC.green }] : []),
     ...completados,
   ] as any[];
 
@@ -484,20 +486,20 @@ export default function TicketsScreen() {
         {/* Stats */}
         <View style={s.qsRow}>
           <View style={s.qs}>
-            <Text style={[s.qsVal, { color: C.blue }]}>{pendientes.length}</Text>
-            <Text style={s.qsLbl}>Pendientes</Text>
+            <Text style={[s.qsVal, { color: CC.blue }]}>{pendientes.length}</Text>
+            <Text style={s.qsLbl}>{statsLbls.pendientes || 'Pendientes'}</Text>
           </View>
           <View style={s.qs}>
-            <Text style={[s.qsVal, { color: C.orange }]}>{asignados.length}</Text>
-            <Text style={s.qsLbl}>Asignados</Text>
+            <Text style={[s.qsVal, { color: CC.orange }]}>{asignados.length}</Text>
+            <Text style={s.qsLbl}>{statsLbls.asignados || 'Asignados'}</Text>
           </View>
           <View style={s.qs}>
-            <Text style={[s.qsVal, { color: C.blue }]}>{activos.length}</Text>
-            <Text style={s.qsLbl}>En camino</Text>
+            <Text style={[s.qsVal, { color: CC.blue }]}>{activos.length}</Text>
+            <Text style={s.qsLbl}>{statsLbls.enCamino || 'En camino'}</Text>
           </View>
           <View style={s.qs}>
-            <Text style={[s.qsVal, { color: C.green }]}>{completados.length}</Text>
-            <Text style={s.qsLbl}>Listas</Text>
+            <Text style={[s.qsVal, { color: CC.green }]}>{completados.length}</Text>
+            <Text style={s.qsLbl}>{statsLbls.listas || 'Listas'}</Text>
           </View>
         </View>
       </View>
