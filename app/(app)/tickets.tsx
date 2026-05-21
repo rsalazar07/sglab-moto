@@ -75,6 +75,31 @@ export default function TicketsScreen() {
     }
   }, []);
 
+  // Auto-start tracking al cargar la pantalla (login → disponible + GPS)
+  const autoStartRef = useRef(false);
+
+  useEffect(() => {
+    if (autoStartRef.current) return;
+    autoStartRef.current = true;
+
+    const autoStart = async () => {
+      try {
+        // Esperar que cargue config primero
+        await new Promise(r => setTimeout(r, 1500));
+        if (turnoActivo) return;
+        await activateKeepAwakeAsync();
+        await startTracking();
+        setTurnoActivo(true);
+        setEstadoMoto('DISPONIBLE');
+        await api.patch(`/motorizados/me/estado`, { estado: 'DISPONIBLE' });
+        log('INFO', 'tracking', 'Auto-start tracking al iniciar sesión');
+      } catch (e) {
+        log('WARN', 'tracking', `Auto-start falló: ${e instanceof Error ? e.message : String(e)}`);
+      }
+    };
+    autoStart();
+  }, []);
+
   useEffect(() => {
     cargarTickets();
     fetchConfig();
