@@ -102,11 +102,20 @@ export default function TicketsScreen() {
     cargarTickets();
     const initSocket = async () => {
       const socket = await getSocket();
-      socket.on('ticket:new', () => cargarTickets());
-      socket.on('ticket:update', () => cargarTickets());
+      // Limpiar listeners previos antes de agregar nuevos (evita duplicados)
+      socket.off('ticket:new', cargarTickets);
+      socket.off('ticket:update', cargarTickets);
+      socket.on('ticket:new', cargarTickets);
+      socket.on('ticket:update', cargarTickets);
     };
     initSocket();
-    return () => { disconnectSocket(); };
+    return () => {
+      // Solo remover nuestros listeners, no desconectar todo el socket
+      getSocket().then((s) => {
+        s.off('ticket:new', cargarTickets);
+        s.off('ticket:update', cargarTickets);
+      });
+    };
   }, []);
 
   const onRefresh = async () => {
