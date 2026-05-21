@@ -416,6 +416,16 @@ export default function TicketsScreen() {
     FALLIDO: '❌ Fallido',
   };
 
+  // Badge corto para cada estado en la tarjeta (uiStatus='done')
+  const BADGE_ESTADO_LABELS: Record<string, string> = {
+    RECOGIDO: 'RECOGIDO',
+    EN_LABORATORIO: 'EN LAB',
+    ENTREGADO: 'ENTREGADO',
+    CERRADO: 'CERRADO',
+    CANCELADO: 'CANCEL',
+    FALLIDO: 'FALLIDO',
+  };
+
   const renderTicket = ({ item }: { item: Ticket }) => {
     const tf2 = config?.ticketFlow || {};
     const uiStatus = tf2[item.estado] || 'done';
@@ -445,7 +455,7 @@ export default function TicketsScreen() {
             borderColor: uiStatus === 'pendiente' ? CC.blue || C.blueBorder : uiStatus === 'pending' ? CC.orange || '#fde8a0' : uiStatus === 'active' ? CC.blue || C.blueBorder : CC.greenLight || '#a8e6c4',
           }]}>
             <Text style={[s.badgeTxt, { color: uiStatus === 'pendiente' ? CC.blue : uiStatus === 'pending' ? CC.orange : uiStatus === 'active' ? CC.blue : CC.green }]}>
-              {badgeLabels[uiStatus] || (uiStatus === 'pendiente' ? 'PENDIENTE' : uiStatus === 'pending' ? 'ASIGNADO' : uiStatus === 'active' ? 'EN CAMINO' : 'COMPLETADO ✓')}
+              {uiStatus === 'done' ? (BADGE_ESTADO_LABELS[item.estado] || 'COMPLETADO ✓') : (badgeLabels[uiStatus] || (uiStatus === 'pendiente' ? 'PENDIENTE' : uiStatus === 'pending' ? 'ASIGNADO' : 'EN CAMINO'))}
             </Text>
           </View>
         </View>
