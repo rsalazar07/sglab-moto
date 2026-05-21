@@ -7,7 +7,7 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { activateKeepAwakeAsync, deactivateKeepAwake } from 'expo-keep-awake';
 import * as ImagePicker from 'expo-image-picker';
-import * as FileSystem from 'expo-file-system';
+import * as FileSystem from 'expo-file-system/legacy';
 import { ticketsApi } from '../../src/api/tickets';
 import { useTracking } from '../../src/hooks/useTracking';
 import { useAuthStore } from '../../src/store/authStore';
@@ -294,7 +294,7 @@ export default function TicketsScreen() {
     if (fotoUri) {
       try {
         const base64 = await FileSystem.readAsStringAsync(fotoUri, {
-          encoding: FileSystem.EncodingType.Base64,
+          encoding: 'base64',
         });
         // Enviar base64 en el registro en vez de subir foto aparte
         registroBase64 = base64;
