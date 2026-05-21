@@ -5,14 +5,21 @@ import { View, Text, ActivityIndicator } from 'react-native';
 import * as SecureStore from 'expo-secure-store';
 import { useAuthStore } from '../src/store/authStore';
 import { authApi } from '../src/api/auth';
+import { api } from '../src/api/client';
 import { send as log } from '../src/lib/LogReporter';
 
 export default function RootLayout() {
   const { setUser } = useAuthStore();
   const [loading, setLoading] = useState(true);
+  const [d, setD] = useState<any>({});
 
   useEffect(() => {
     (async () => {
+      try {
+        // Cargar config del VPS para splash
+        const res = await api.get('/motorizados/config');
+        setD(res.data?.dashboard || {});
+      } catch {}
       try {
         const token = await SecureStore.getItemAsync('accessToken');
         if (token) {
@@ -31,9 +38,9 @@ export default function RootLayout() {
 
   if (loading) {
     return (
-      <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: '#0a0a0a' }}>
-        <ActivityIndicator size="large" color="#00d4ff" />
-        <Text style={{ color: '#888', marginTop: 12 }}>Cargando...</Text>
+      <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: d.splashBg || '#0a0a0a' }}>
+        <ActivityIndicator size="large" color={d.splashSpinner || '#00d4ff'} />
+        <Text style={{ color: d.splashTextColor || '#888', marginTop: 12 }}>{d.splashText || 'Cargando...'}</Text>
       </View>
     );
   }

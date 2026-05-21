@@ -1,4 +1,4 @@
-import { useEffect, useState, useCallback, useRef } from 'react';
+import { useEffect, useState, useCallback, useRef, useMemo } from 'react';
 import {
   View, Text, FlatList, TouchableOpacity, StyleSheet,
   RefreshControl, Alert, Modal, TextInput, ScrollView,
@@ -17,7 +17,7 @@ import { router } from 'expo-router';
 import { send as log } from '../../src/lib/LogReporter';
 import type { Ticket, EstadoTicket } from '../../src/types';
 
-const C = {
+const FALLBACK = {
   blue:'#4BBFE0', blueDark:'#2fa8cc', blueLight:'#EBF7FC', blueBorder:'#c8ebf7',
   gray:'#8C8C8C', grayLight:'#F5F6F8', grayBorder:'#E8E8E8',
   text:'#1a1a2e', text2:'#6b7280',
@@ -27,12 +27,98 @@ const C = {
   white:'#FFFFFF',
 };
 
+function makeStyles(C: any) {
+  return StyleSheet.create({
+    root: { flex:1, backgroundColor: C.grayLight || '#F5F6F8' },
+    header: { backgroundColor: C.white || '#FFFFFF', padding:14, borderBottomWidth:1, borderBottomColor: C.grayBorder || '#E8E8E8' },
+    hTop: { flexDirection:'row', alignItems:'center', gap:10, marginBottom:12 },
+    av: { width:40, height:40, borderRadius:11, backgroundColor: C.blue || '#4BBFE0', alignItems:'center', justifyContent:'center' },
+    avTxt: { fontSize:17, fontWeight:'800', color: C.white || '#fff' },
+    hName: { fontSize:14, fontWeight:'700', color: C.text || '#1a1a2e' },
+    gpsRow: { flexDirection:'row', alignItems:'center', gap:4, marginTop:2 },
+    gpsDot: { width:6, height:6, borderRadius:3 },
+    gpsTxt: { fontSize:10, fontWeight:'600' },
+    estadoPill: { flexDirection:'row', alignItems:'center', gap:4, paddingHorizontal:10, paddingVertical:6, borderRadius:20, borderWidth:1.5 },
+    estadoPillIc: { fontSize:13 },
+    estadoPillTxt: { fontSize:10, fontWeight:'800' },
+    qsRow: { flexDirection:'row', gap:8 },
+    qs: { flex:1, backgroundColor: C.grayLight || '#F5F6F8', borderRadius:9, padding:8, alignItems:'center' },
+    qsVal: { fontSize:18, fontWeight:'800' },
+    qsLbl: { fontSize:8, fontWeight:'600', color: C.gray || '#8C8C8C', textTransform:'uppercase', letterSpacing:0.5, marginTop:1 },
+    banner: { flexDirection:'row', alignItems:'center', gap:6, paddingHorizontal:14, paddingVertical:8, borderBottomWidth:1, borderBottomColor: C.grayBorder || '#E8E8E8' },
+    bannerIc: { fontSize:13 },
+    bannerTxt: { fontSize:10, fontWeight:'700' },
+    list: { padding:12, paddingBottom:32 },
+    sep: { fontSize:9, fontWeight:'800', letterSpacing:1, textTransform:'uppercase', paddingVertical:6, paddingHorizontal:2 },
+    tcard: { backgroundColor: C.white || '#fff', borderRadius:14, padding:13, borderLeftWidth:4 },
+    tcardActive: { backgroundColor: C.blueLight || '#f0fafd' },
+    tcTop: { flexDirection:'row', justifyContent:'space-between', alignItems:'center', marginBottom:8 },
+    tcId: { fontSize:9, color: C.gray || '#8C8C8C', letterSpacing:0.5, fontFamily:'monospace' },
+    badge: { paddingHorizontal:8, paddingVertical:3, borderRadius:20, borderWidth:1 },
+    badgeTxt: { fontSize:8, fontWeight:'800', letterSpacing:0.4 },
+    tcRef: { fontSize:10, fontWeight:'700', color: C.blue || '#4BBFE0', marginBottom:2 },
+    tcType: { fontSize:13, fontWeight:'800', color: C.text || '#1a1a2e', marginBottom:3 },
+    tcAddr: { fontSize:10, color: C.text2 || '#6b7280', lineHeight:16 },
+    tcPhone: { fontSize:9, color: C.gray || '#8C8C8C', marginTop:2 },
+    ttime: { alignSelf:'flex-start', backgroundColor: C.orangeLight || '#FEF9EC', borderRadius:20, paddingHorizontal:9, paddingVertical:3, marginVertical:6 },
+    ttimeUrgent: { backgroundColor: C.redLight || '#FEF0EF' },
+    ttimeTxt: { fontSize:9, fontWeight:'700', color: C.orange || '#F39C12' },
+    notas: { fontSize:10, color: C.gray || '#8C8C8C', fontStyle:'italic', marginBottom:6 },
+    abtn: { borderRadius:10, padding:12, alignItems:'center', marginTop:8 },
+    abtnTxt: { fontSize:12, fontWeight:'800', color: C.white || '#fff', letterSpacing:0.2 },
+    doneTag: { fontSize:10, fontWeight:'700', color: C.green || '#2ECC71', marginTop:8 },
+    empty: { alignItems:'center', paddingTop:60 },
+    emptyIc: { fontSize:48, marginBottom:12 },
+    emptyTxt: { fontSize:15, color: C.gray || '#8C8C8C', fontWeight:'700' },
+    emptySub: { fontSize:11, color: C.grayBorder || '#ccc', marginTop:4 },
+    overlay: { flex:1, backgroundColor:'rgba(0,0,0,0.5)', justifyContent:'flex-end' },
+    sheet: { backgroundColor: C.white || '#fff', borderTopLeftRadius:20, borderTopRightRadius:20, padding:18, paddingBottom:32 },
+    handle: { width:36, height:3, backgroundColor: C.grayBorder || '#E8E8E8', borderRadius:2, alignSelf:'center', marginBottom:14 },
+    sheetTitle: { fontSize:16, fontWeight:'800', color: C.text || '#1a1a2e', marginBottom:3 },
+    sheetSub: { fontSize:11, color: C.gray || '#8C8C8C', marginBottom:16 },
+    msec: { fontSize:9, fontWeight:'700', color: C.gray || '#8C8C8C', textTransform:'uppercase', letterSpacing:0.8, marginTop:12, marginBottom:6 },
+    optional: { color: C.grayBorder || '#ccc', fontWeight:'400' },
+    minp: { backgroundColor: C.grayLight || '#F5F6F8', borderWidth:1.5, borderColor: C.grayBorder || '#E8E8E8', borderRadius:9, padding:10, fontSize:12, color: C.text || '#1a1a2e' },
+    fotoBtn: { backgroundColor: C.grayLight || '#F5F6F8', borderWidth:1.5, borderColor: C.grayBorder || '#E8E8E8', borderStyle:'dashed', borderRadius:10, padding:20, alignItems:'center' },
+    fotoBtnLbl: { fontSize:12, fontWeight:'700', color: C.gray || '#8C8C8C' },
+    fotoBtnSub: { fontSize:9, color: C.grayBorder || '#ccc', marginTop:2 },
+    fotoPreview: { backgroundColor: C.blueLight || '#EBF7FC', borderWidth:1.5, borderColor: C.blueBorder || '#c8ebf7', borderRadius:10, padding:10, flexDirection:'row', alignItems:'center', gap:10 },
+    fotoName: { fontSize:11, fontWeight:'700', color: C.blue || '#4BBFE0' },
+    pagoGrid: { flexDirection:'row', flexWrap:'wrap', gap:8 },
+    pagoOpt: { width:'47%', backgroundColor: C.grayLight || '#F5F6F8', borderWidth:1.5, borderColor: C.grayBorder || '#E8E8E8', borderRadius:10, padding:12, alignItems:'center' },
+    pagoLbl: { fontSize:10, fontWeight:'700', color: C.text2 || '#6b7280' },
+    montoRow: { flexDirection:'row', alignItems:'center', backgroundColor: C.grayLight || '#F5F6F8', borderWidth:1.5, borderColor: C.grayBorder || '#E8E8E8', borderRadius:9, overflow:'hidden' },
+    montoPre: { padding:10, backgroundColor: C.grayBorder || '#E8E8E8' },
+    montoPreTxt: { fontSize:14, fontWeight:'800', color: C.gray || '#8C8C8C' },
+    montoInp: { flex:1, padding:10, fontSize:16, fontWeight:'800', color: C.text || '#1a1a2e' },
+    mActions: { flexDirection:'row', gap:8, marginTop:16 },
+    mCancel: { flex:1, padding:12, borderRadius:10, borderWidth:1.5, borderColor: C.grayBorder || '#E8E8E8', alignItems:'center' },
+    mCancelTxt: { fontSize:12, fontWeight:'700', color: C.gray || '#8C8C8C' },
+    mConfirm: { flex:2, padding:12, borderRadius:10, alignItems:'center' },
+    mConfirmTxt: { fontSize:12, fontWeight:'800', color: C.white || '#fff' },
+    eOpt: { flexDirection:'row', alignItems:'center', gap:12, padding:13, borderRadius:12, borderWidth:1.5, borderColor: C.grayBorder || '#E8E8E8', marginBottom:8 },
+    eOptIc: { fontSize:24, width:32, textAlign:'center' },
+    eOptName: { fontSize:13, fontWeight:'800', color: C.text || '#1a1a2e' },
+    eOptDesc: { fontSize:10, color: C.gray || '#8C8C8C', marginTop:1 },
+    eCheck: { width:20, height:20, borderRadius:10, borderWidth:2, borderColor: C.grayBorder || '#E8E8E8', alignItems:'center', justifyContent:'center' },
+    confirmBtn: { borderRadius:12, padding:14, alignItems:'center', marginTop:8 },
+    confirmBtnTxt: { fontSize:14, fontWeight:'800', color: C.white || '#fff' },
+    cancelBtn: { padding:12, alignItems:'center' },
+    cancelBtnTxt: { fontSize:13, fontWeight:'700', color: C.gray || '#8C8C8C' },
+    alertBox: { backgroundColor: C.white || '#fff', borderRadius:18, padding:24, margin:24, alignItems:'center' },
+    alertIc: { fontSize:40, marginBottom:8 },
+    alertTitle: { fontSize:16, fontWeight:'800', color: C.text || '#1a1a2e', textAlign:'center', lineHeight:22, marginBottom:8 },
+    alertBody: { fontSize:12, color: C.text2 || '#6b7280', textAlign:'center', lineHeight:18 },
+  });
+}
+
 type MetodoPago = 'EFECTIVO' | 'YAPE' | 'TRANSFERENCIA' | 'SIN_PAGO';
 
 export default function TicketsScreen() {
   const user = useAuthStore((s) => s.user);
   const clearUser = useAuthStore((s) => s.clearUser);
   const [config, setConfig] = useState<any>(null);
+  const [colores, setColores] = useState<any>(FALLBACK);
   const [tickets, setTickets] = useState<Ticket[]>([]);
   const [refreshing, setRefreshing] = useState(false);
   const [turnoActivo, setTurnoActivo] = useState(false);
@@ -56,6 +142,8 @@ export default function TicketsScreen() {
   const currentTicketId = useRef<string | null>(null);
   const { startTracking, stopTracking } = useTracking();
 
+  const s = useMemo(() => makeStyles(colores), [colores]);
+
   const cargarTickets = useCallback(async () => {
     try {
       const data = await ticketsApi.getMisTickets();
@@ -70,6 +158,9 @@ export default function TicketsScreen() {
     try {
       const res = await api.get('/motorizados/config');
       setConfig(res.data);
+      if (res.data?.dashboard?.colors) {
+        setColores(res.data.dashboard.colors);
+      }
     } catch (e) {
       log('WARN', 'config', `Error fetching config: ${e instanceof Error ? e.message : String(e)}`);
     }
@@ -367,37 +458,44 @@ export default function TicketsScreen() {
 
   const eActual = config?.estadosMoto?.[estadoMoto] || {};
 
+  // Badge labels desde config o fallback
+  const badgeLabels: Record<string, string> = config?.dashboard?.ticketBadgeLabels || {
+    pendiente: 'PENDIENTE',
+    pending: 'ASIGNADO',
+    active: 'EN CAMINO',
+    done: 'COMPLETADO ✓',
+  };
+
   const renderTicket = ({ item }: { item: Ticket }) => {
     const tf2 = config?.ticketFlow || {};
     const uiStatus = tf2[item.estado] || 'done';
     const isDone = uiStatus === 'done';
     // Labels y colores desde el config del VPS
-    const CC = config?.dashboard?.colors || C;
     const UI_LABELS: Record<string, string> = {
       pendiente: '📋  Tomar pedido',
       pending: '🏍️  Voy ahora',
       active:  '🧪  Ya recogí la muestra',
     };
     const UI_COLORS: Record<string, string> = {
-      pendiente: CC.blue,
-      pending:   CC.orange,
-      active:    CC.blue,
+      pendiente: colores.blue,
+      pending:   colores.orange,
+      active:    colores.blue,
     };
     const btnLabel = UI_LABELS[uiStatus];
     const btnColor = UI_COLORS[uiStatus];
     const cargando = loadingId === item.id;
-    const borderColor = uiStatus === 'pendiente' ? CC.blue : uiStatus === 'pending' ? CC.orange : uiStatus === 'active' ? CC.blue : CC.green;
+    const borderColor = uiStatus === 'pendiente' ? colores.blue : uiStatus === 'pending' ? colores.orange : uiStatus === 'active' ? colores.blue : colores.green;
 
     return (
       <View style={[s.tcard, { borderLeftColor: borderColor }, (uiStatus === 'active' || uiStatus === 'pendiente') && s.tcardActive]}>
         <View style={s.tcTop}>
           <Text style={s.tcId}>#{item.id.slice(-6).toUpperCase()}</Text>
           <View style={[s.badge, {
-            backgroundColor: uiStatus === 'pendiente' ? CC.blueLight : uiStatus === 'pending' ? CC.orangeLight : uiStatus === 'active' ? CC.blueLight : CC.greenLight,
-            borderColor: uiStatus === 'pendiente' ? CC.blue || C.blueBorder : uiStatus === 'pending' ? CC.orange || '#fde8a0' : uiStatus === 'active' ? CC.blue || C.blueBorder : '#a8e6c4',
+            backgroundColor: uiStatus === 'pendiente' ? colores.blueLight : uiStatus === 'pending' ? colores.orangeLight : uiStatus === 'active' ? colores.blueLight : colores.greenLight,
+            borderColor: uiStatus === 'pendiente' ? colores.blueBorder : uiStatus === 'pending' ? colores.orange || '#fde8a0' : uiStatus === 'active' ? colores.blueBorder : '#a8e6c4',
           }]}>
-            <Text style={[s.badgeTxt, { color: uiStatus === 'pendiente' ? CC.blue : uiStatus === 'pending' ? CC.orange : uiStatus === 'active' ? CC.blue : CC.green }]}>
-              {uiStatus === 'pendiente' ? 'PENDIENTE' : uiStatus === 'pending' ? 'ASIGNADO' : uiStatus === 'active' ? 'EN CAMINO' : 'COMPLETADO ✓'}
+            <Text style={[s.badgeTxt, { color: uiStatus === 'pendiente' ? colores.blue : uiStatus === 'pending' ? colores.orange : uiStatus === 'active' ? colores.blue : colores.green }]}>
+              {badgeLabels[uiStatus] || uiStatus}
             </Text>
           </View>
         </View>
@@ -415,7 +513,7 @@ export default function TicketsScreen() {
 
         {item.horaLimite && !isDone && (
           <View style={[s.ttime, new Date(item.horaLimite) < new Date() && s.ttimeUrgent]}>
-            <Text style={[s.ttimeTxt, new Date(item.horaLimite) < new Date() && { color: C.red }]}>
+            <Text style={[s.ttimeTxt, new Date(item.horaLimite) < new Date() && { color: colores.red }]}>
               ⏰ Límite: {new Date(item.horaLimite).toLocaleTimeString('es-PE', { hour:'2-digit', minute:'2-digit' })}
             </Text>
           </View>
@@ -443,16 +541,32 @@ export default function TicketsScreen() {
     );
   };
 
+  // Quick stats labels desde config o fallback
+  const qsLabels = config?.dashboard?.quickStatsLabels || {
+    pendientes: 'Pendientes',
+    asignados: 'Asignados',
+    enCamino: 'En camino',
+    listas: 'Listas',
+  };
+
   const listaCompleta = [
-    ...(activos.length > 0 ? [{ _sep: '🔵 En camino', _color: C.blue }] : []),
+    ...(activos.length > 0 ? [{ _sep: `🔵 ${qsLabels.enCamino}`, _color: colores.blue }] : []),
     ...activos,
-    ...(pendientes.length > 0 ? [{ _sep: '📋 Pendientes', _color: C.blue }] : []),
+    ...(pendientes.length > 0 ? [{ _sep: `📋 ${qsLabels.pendientes}`, _color: colores.blue }] : []),
     ...pendientes,
-    ...(asignados.length > 0 ? [{ _sep: '⏳ Asignados', _color: C.orange }] : []),
+    ...(asignados.length > 0 ? [{ _sep: `⏳ ${qsLabels.asignados}`, _color: colores.orange }] : []),
     ...asignados,
-    ...(completados.length > 0 ? [{ _sep: '✅ Completados', _color: C.green }] : []),
+    ...(completados.length > 0 ? [{ _sep: `✅ ${qsLabels.listas}`, _color: colores.green }] : []),
     ...completados,
   ] as any[];
+
+  // opcionesPago desde config o fallback
+  const opcionesPago = config?.opcionesPago || [
+    { key: 'EFECTIVO', ic: '💵', lbl: 'Efectivo' },
+    { key: 'YAPE', ic: '📱', lbl: 'Yape' },
+    { key: 'TRANSFERENCIA', ic: '🏦', lbl: 'Transferencia' },
+    { key: 'SIN_PAGO', ic: '🚫', lbl: 'Sin pago' },
+  ];
 
   return (
     <SafeAreaView style={s.root} edges={['top']}>
@@ -484,20 +598,20 @@ export default function TicketsScreen() {
         {/* Stats */}
         <View style={s.qsRow}>
           <View style={s.qs}>
-            <Text style={[s.qsVal, { color: C.blue }]}>{pendientes.length}</Text>
-            <Text style={s.qsLbl}>Pendientes</Text>
+            <Text style={[s.qsVal, { color: colores.blue }]}>{pendientes.length}</Text>
+            <Text style={s.qsLbl}>{qsLabels.pendientes}</Text>
           </View>
           <View style={s.qs}>
-            <Text style={[s.qsVal, { color: C.orange }]}>{asignados.length}</Text>
-            <Text style={s.qsLbl}>Asignados</Text>
+            <Text style={[s.qsVal, { color: colores.orange }]}>{asignados.length}</Text>
+            <Text style={s.qsLbl}>{qsLabels.asignados}</Text>
           </View>
           <View style={s.qs}>
-            <Text style={[s.qsVal, { color: C.blue }]}>{activos.length}</Text>
-            <Text style={s.qsLbl}>En camino</Text>
+            <Text style={[s.qsVal, { color: colores.blue }]}>{activos.length}</Text>
+            <Text style={s.qsLbl}>{qsLabels.enCamino}</Text>
           </View>
           <View style={s.qs}>
-            <Text style={[s.qsVal, { color: C.green }]}>{completados.length}</Text>
-            <Text style={s.qsLbl}>Listas</Text>
+            <Text style={[s.qsVal, { color: colores.green }]}>{completados.length}</Text>
+            <Text style={s.qsLbl}>{qsLabels.listas}</Text>
           </View>
         </View>
       </View>
@@ -518,7 +632,7 @@ export default function TicketsScreen() {
             : renderTicket({ item })
         }
         contentContainerStyle={s.list}
-        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={C.blue} />}
+        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={colores.blue} />}
         ListEmptyComponent={
           <View style={s.empty}>
             <Text style={s.emptyIc}>📭</Text>
@@ -551,17 +665,17 @@ export default function TicketsScreen() {
                   <View style={{ flex: 1 }}>
                     <Text style={s.eOptName}>{e.label || key}</Text>
                     <Text style={s.eOptDesc}>
-                      {key === 'DISPONIBLE' ? 'En turno, listo para recojos' : key === 'OCUPADO' ? 'En pausa · vuelvo en unos minutos' : key === 'OFF_LINE' ? 'Terminé mi jornada del día' : ''}
+                      {e.desc || ''}
                     </Text>
                   </View>
                   <View style={[s.eCheck, isSel && { backgroundColor: e.color, borderColor: e.color }]}>
-                    {isSel && <Text style={{ color: C.white, fontSize: 10, fontWeight: '800' }}>✓</Text>}
+                    {isSel && <Text style={{ color: colores.white, fontSize: 10, fontWeight: '800' }}>✓</Text>}
                   </View>
                 </TouchableOpacity>
               );
             })}
 
-            <TouchableOpacity style={[s.confirmBtn, { backgroundColor: C.blue }]} onPress={confirmarEstadoMoto}>
+            <TouchableOpacity style={[s.confirmBtn, { backgroundColor: colores.blue }]} onPress={confirmarEstadoMoto}>
               <Text style={s.confirmBtnTxt}>Confirmar estado</Text>
             </TouchableOpacity>
             <TouchableOpacity style={s.cancelBtn} onPress={() => setEstadoModal(false)}>
@@ -587,7 +701,7 @@ export default function TicketsScreen() {
                 value={refNombre}
                 onChangeText={setRefNombre}
                 placeholder="Ej. María López"
-                placeholderTextColor={C.grayBorder}
+                placeholderTextColor={colores.grayBorder}
               />
 
               {/* Foto */}
@@ -602,10 +716,10 @@ export default function TicketsScreen() {
                   <Text style={{ fontSize: 22 }}>🖼️</Text>
                   <View style={{ flex: 1 }}>
                     <Text style={s.fotoName}>evidencia_foto.jpg</Text>
-                    <Text style={{ fontSize: 10, color: C.gray }}>Lista para subir</Text>
+                    <Text style={{ fontSize: 10, color: colores.gray }}>Lista para subir</Text>
                   </View>
                   <TouchableOpacity onPress={() => setFotoUri(null)}>
-                    <Text style={{ fontSize: 11, color: C.red, fontWeight: '700' }}>Quitar</Text>
+                    <Text style={{ fontSize: 11, color: colores.red, fontWeight: '700' }}>Quitar</Text>
                   </TouchableOpacity>
                 </View>
               )}
@@ -617,27 +731,22 @@ export default function TicketsScreen() {
                 value={observaciones}
                 onChangeText={setObservaciones}
                 placeholder="Ej. Muestra en buen estado, sin incidencias"
-                placeholderTextColor={C.grayBorder}
+                placeholderTextColor={colores.grayBorder}
                 multiline
               />
 
               {/* Pago */}
               <Text style={s.msec}>Pago recibido <Text style={s.optional}>(opcional)</Text></Text>
               <View style={s.pagoGrid}>
-                {([
-                  { key: 'EFECTIVO', ic: '💵', lbl: 'Efectivo' },
-                  { key: 'YAPE', ic: '📱', lbl: 'Yape' },
-                  { key: 'TRANSFERENCIA', ic: '🏦', lbl: 'Transferencia' },
-                  { key: 'SIN_PAGO', ic: '🚫', lbl: 'Sin pago' },
-                ] as { key: MetodoPago; ic: string; lbl: string }[]).map(p => (
+                {(opcionesPago as { key: MetodoPago; ic: string; lbl: string }[]).map(p => (
                   <TouchableOpacity
                     key={p.key}
-                    style={[s.pagoOpt, metodoPago === p.key && { backgroundColor: C.blueLight, borderColor: C.blue }]}
+                    style={[s.pagoOpt, metodoPago === p.key && { backgroundColor: colores.blueLight, borderColor: colores.blue }]}
                     onPress={() => setMetodoPago(p.key)}
                     activeOpacity={0.82}
                   >
                     <Text style={{ fontSize: 22, marginBottom: 3 }}>{p.ic}</Text>
-                    <Text style={[s.pagoLbl, metodoPago === p.key && { color: C.blue }]}>{p.lbl}</Text>
+                    <Text style={[s.pagoLbl, metodoPago === p.key && { color: colores.blue }]}>{p.lbl}</Text>
                   </TouchableOpacity>
                 ))}
               </View>
@@ -653,7 +762,7 @@ export default function TicketsScreen() {
                       value={monto}
                       onChangeText={setMonto}
                       placeholder="0.00"
-                      placeholderTextColor={C.grayBorder}
+                      placeholderTextColor={colores.grayBorder}
                       keyboardType="decimal-pad"
                     />
                   </View>
@@ -665,12 +774,12 @@ export default function TicketsScreen() {
                   <Text style={s.mCancelTxt}>Cancelar</Text>
                 </TouchableOpacity>
                 <TouchableOpacity
-                  style={[s.mConfirm, { backgroundColor: C.blue }, subiendo && { opacity: 0.6 }]}
+                  style={[s.mConfirm, { backgroundColor: colores.blue }, subiendo && { opacity: 0.6 }]}
                   onPress={intentarConfirmar}
                   disabled={subiendo}
                 >
                   {subiendo
-                    ? <ActivityIndicator color={C.white} />
+                    ? <ActivityIndicator color={colores.white} />
                     : <Text style={s.mConfirmTxt}>Confirmar recojo ✓</Text>
                   }
                 </TouchableOpacity>
@@ -689,11 +798,11 @@ export default function TicketsScreen() {
             <Text style={s.alertBody}>
               Si tienes foto, nombre o notas que agregar, puedes volver al formulario y completarlos.
             </Text>
-            <TouchableOpacity style={[s.confirmBtn, { backgroundColor: C.blue, marginTop: 16 }]} onPress={confirmarSinEventualidades}>
+            <TouchableOpacity style={[s.confirmBtn, { backgroundColor: colores.blue, marginTop: 16 }]} onPress={confirmarSinEventualidades}>
               <Text style={s.confirmBtnTxt}>Sí, confirmar recojo</Text>
             </TouchableOpacity>
             <TouchableOpacity style={[s.cancelBtn, { marginTop: 8 }]} onPress={volverAlFormulario}>
-              <Text style={[s.cancelBtnTxt, { color: C.text }]}>No, volver a registrar</Text>
+              <Text style={[s.cancelBtnTxt, { color: colores.text }]}>No, volver a registrar</Text>
             </TouchableOpacity>
           </View>
         </View>
@@ -702,86 +811,3 @@ export default function TicketsScreen() {
     </SafeAreaView>
   );
 }
-
-const s = StyleSheet.create({
-  root: { flex:1, backgroundColor:'#F5F6F8' },
-  header: { backgroundColor:'#FFFFFF', padding:14, borderBottomWidth:1, borderBottomColor:'#E8E8E8' },
-  hTop: { flexDirection:'row', alignItems:'center', gap:10, marginBottom:12 },
-  av: { width:40, height:40, borderRadius:11, backgroundColor:'#4BBFE0', alignItems:'center', justifyContent:'center' },
-  avTxt: { fontSize:17, fontWeight:'800', color:'#fff' },
-  hName: { fontSize:14, fontWeight:'700', color:'#1a1a2e' },
-  gpsRow: { flexDirection:'row', alignItems:'center', gap:4, marginTop:2 },
-  gpsDot: { width:6, height:6, borderRadius:3 },
-  gpsTxt: { fontSize:10, fontWeight:'600' },
-  estadoPill: { flexDirection:'row', alignItems:'center', gap:4, paddingHorizontal:10, paddingVertical:6, borderRadius:20, borderWidth:1.5 },
-  estadoPillIc: { fontSize:13 },
-  estadoPillTxt: { fontSize:10, fontWeight:'800' },
-  qsRow: { flexDirection:'row', gap:8 },
-  qs: { flex:1, backgroundColor:'#F5F6F8', borderRadius:9, padding:8, alignItems:'center' },
-  qsVal: { fontSize:18, fontWeight:'800' },
-  qsLbl: { fontSize:8, fontWeight:'600', color:'#8C8C8C', textTransform:'uppercase', letterSpacing:0.5, marginTop:1 },
-  banner: { flexDirection:'row', alignItems:'center', gap:6, paddingHorizontal:14, paddingVertical:8, borderBottomWidth:1, borderBottomColor:'#E8E8E8' },
-  bannerIc: { fontSize:13 },
-  bannerTxt: { fontSize:10, fontWeight:'700' },
-  list: { padding:12, paddingBottom:32 },
-  sep: { fontSize:9, fontWeight:'800', letterSpacing:1, textTransform:'uppercase', paddingVertical:6, paddingHorizontal:2 },
-  tcard: { backgroundColor:'#fff', borderRadius:14, padding:13, borderLeftWidth:4 },
-  tcardActive: { backgroundColor:'#f0fafd' },
-  tcTop: { flexDirection:'row', justifyContent:'space-between', alignItems:'center', marginBottom:8 },
-  tcId: { fontSize:9, color:'#8C8C8C', letterSpacing:0.5, fontFamily:'monospace' },
-  badge: { paddingHorizontal:8, paddingVertical:3, borderRadius:20, borderWidth:1 },
-  badgeTxt: { fontSize:8, fontWeight:'800', letterSpacing:0.4 },
-  tcRef: { fontSize:10, fontWeight:'700', color:'#4BBFE0', marginBottom:2 },
-  tcType: { fontSize:13, fontWeight:'800', color:'#1a1a2e', marginBottom:3 },
-  tcAddr: { fontSize:10, color:'#6b7280', lineHeight:16 },
-  tcPhone: { fontSize:9, color:'#8C8C8C', marginTop:2 },
-  ttime: { alignSelf:'flex-start', backgroundColor:'#FEF9EC', borderRadius:20, paddingHorizontal:9, paddingVertical:3, marginVertical:6 },
-  ttimeUrgent: { backgroundColor:'#FEF0EF' },
-  ttimeTxt: { fontSize:9, fontWeight:'700', color:'#F39C12' },
-  notas: { fontSize:10, color:'#8C8C8C', fontStyle:'italic', marginBottom:6 },
-  abtn: { borderRadius:10, padding:12, alignItems:'center', marginTop:8 },
-  abtnTxt: { fontSize:12, fontWeight:'800', color:'#fff', letterSpacing:0.2 },
-  doneTag: { fontSize:10, fontWeight:'700', color:'#2ECC71', marginTop:8 },
-  empty: { alignItems:'center', paddingTop:60 },
-  emptyIc: { fontSize:48, marginBottom:12 },
-  emptyTxt: { fontSize:15, color:'#8C8C8C', fontWeight:'700' },
-  emptySub: { fontSize:11, color:'#ccc', marginTop:4 },
-  overlay: { flex:1, backgroundColor:'rgba(0,0,0,0.5)', justifyContent:'flex-end' },
-  sheet: { backgroundColor:'#fff', borderTopLeftRadius:20, borderTopRightRadius:20, padding:18, paddingBottom:32 },
-  handle: { width:36, height:3, backgroundColor:'#E8E8E8', borderRadius:2, alignSelf:'center', marginBottom:14 },
-  sheetTitle: { fontSize:16, fontWeight:'800', color:'#1a1a2e', marginBottom:3 },
-  sheetSub: { fontSize:11, color:'#8C8C8C', marginBottom:16 },
-  msec: { fontSize:9, fontWeight:'700', color:'#8C8C8C', textTransform:'uppercase', letterSpacing:0.8, marginTop:12, marginBottom:6 },
-  optional: { color:'#ccc', fontWeight:'400' },
-  minp: { backgroundColor:'#F5F6F8', borderWidth:1.5, borderColor:'#E8E8E8', borderRadius:9, padding:10, fontSize:12, color:'#1a1a2e' },
-  fotoBtn: { backgroundColor:'#F5F6F8', borderWidth:1.5, borderColor:'#E8E8E8', borderStyle:'dashed', borderRadius:10, padding:20, alignItems:'center' },
-  fotoBtnLbl: { fontSize:12, fontWeight:'700', color:'#8C8C8C' },
-  fotoBtnSub: { fontSize:9, color:'#ccc', marginTop:2 },
-  fotoPreview: { backgroundColor:'#EBF7FC', borderWidth:1.5, borderColor:'#c8ebf7', borderRadius:10, padding:10, flexDirection:'row', alignItems:'center', gap:10 },
-  fotoName: { fontSize:11, fontWeight:'700', color:'#4BBFE0' },
-  pagoGrid: { flexDirection:'row', flexWrap:'wrap', gap:8 },
-  pagoOpt: { width:'47%', backgroundColor:'#F5F6F8', borderWidth:1.5, borderColor:'#E8E8E8', borderRadius:10, padding:12, alignItems:'center' },
-  pagoLbl: { fontSize:10, fontWeight:'700', color:'#6b7280' },
-  montoRow: { flexDirection:'row', alignItems:'center', backgroundColor:'#F5F6F8', borderWidth:1.5, borderColor:'#E8E8E8', borderRadius:9, overflow:'hidden' },
-  montoPre: { padding:10, backgroundColor:'#E8E8E8' },
-  montoPreTxt: { fontSize:14, fontWeight:'800', color:'#8C8C8C' },
-  montoInp: { flex:1, padding:10, fontSize:16, fontWeight:'800', color:'#1a1a2e' },
-  mActions: { flexDirection:'row', gap:8, marginTop:16 },
-  mCancel: { flex:1, padding:12, borderRadius:10, borderWidth:1.5, borderColor:'#E8E8E8', alignItems:'center' },
-  mCancelTxt: { fontSize:12, fontWeight:'700', color:'#8C8C8C' },
-  mConfirm: { flex:2, padding:12, borderRadius:10, alignItems:'center' },
-  mConfirmTxt: { fontSize:12, fontWeight:'800', color:'#fff' },
-  eOpt: { flexDirection:'row', alignItems:'center', gap:12, padding:13, borderRadius:12, borderWidth:1.5, borderColor:'#E8E8E8', marginBottom:8 },
-  eOptIc: { fontSize:24, width:32, textAlign:'center' },
-  eOptName: { fontSize:13, fontWeight:'800', color:'#1a1a2e' },
-  eOptDesc: { fontSize:10, color:'#8C8C8C', marginTop:1 },
-  eCheck: { width:20, height:20, borderRadius:10, borderWidth:2, borderColor:'#E8E8E8', alignItems:'center', justifyContent:'center' },
-  confirmBtn: { borderRadius:12, padding:14, alignItems:'center', marginTop:8 },
-  confirmBtnTxt: { fontSize:14, fontWeight:'800', color:'#fff' },
-  cancelBtn: { padding:12, alignItems:'center' },
-  cancelBtnTxt: { fontSize:13, fontWeight:'700', color:'#8C8C8C' },
-  alertBox: { backgroundColor:'#fff', borderRadius:18, padding:24, margin:24, alignItems:'center' },
-  alertIc: { fontSize:40, marginBottom:8 },
-  alertTitle: { fontSize:16, fontWeight:'800', color:'#1a1a2e', textAlign:'center', lineHeight:22, marginBottom:8 },
-  alertBody: { fontSize:12, color:'#6b7280', textAlign:'center', lineHeight:18 },
-});
