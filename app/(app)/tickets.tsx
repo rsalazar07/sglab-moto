@@ -372,30 +372,31 @@ export default function TicketsScreen() {
     const uiStatus = tf2[item.estado] || 'done';
     const isDone = uiStatus === 'done';
     // Labels y colores desde el config del VPS
+    const CC = config?.dashboard?.colors || C;
     const UI_LABELS: Record<string, string> = {
       pendiente: '📋  Tomar pedido',
       pending: '🏍️  Voy ahora',
       active:  '🧪  Ya recogí la muestra',
     };
     const UI_COLORS: Record<string, string> = {
-      pendiente: C.blue,
-      pending: C.orange,
-      active:  C.blue,
+      pendiente: CC.blue,
+      pending:   CC.orange,
+      active:    CC.blue,
     };
     const btnLabel = UI_LABELS[uiStatus];
     const btnColor = UI_COLORS[uiStatus];
     const cargando = loadingId === item.id;
-    const borderColor = uiStatus === 'pendiente' ? C.blue : uiStatus === 'pending' ? C.orange : uiStatus === 'active' ? C.blue : C.green;
+    const borderColor = uiStatus === 'pendiente' ? CC.blue : uiStatus === 'pending' ? CC.orange : uiStatus === 'active' ? CC.blue : CC.green;
 
     return (
       <View style={[s.tcard, { borderLeftColor: borderColor }, (uiStatus === 'active' || uiStatus === 'pendiente') && s.tcardActive]}>
         <View style={s.tcTop}>
           <Text style={s.tcId}>#{item.id.slice(-6).toUpperCase()}</Text>
           <View style={[s.badge, {
-            backgroundColor: uiStatus === 'pendiente' ? C.blueLight : uiStatus === 'pending' ? C.orangeLight : uiStatus === 'active' ? C.blueLight : C.greenLight,
-            borderColor: uiStatus === 'pendiente' ? C.blueBorder : uiStatus === 'pending' ? '#fde8a0' : uiStatus === 'active' ? C.blueBorder : '#a8e6c4',
+            backgroundColor: uiStatus === 'pendiente' ? CC.blueLight : uiStatus === 'pending' ? CC.orangeLight : uiStatus === 'active' ? CC.blueLight : CC.greenLight,
+            borderColor: uiStatus === 'pendiente' ? CC.blue || C.blueBorder : uiStatus === 'pending' ? CC.orange || '#fde8a0' : uiStatus === 'active' ? CC.blue || C.blueBorder : '#a8e6c4',
           }]}>
-            <Text style={[s.badgeTxt, { color: uiStatus === 'pendiente' ? C.blue : uiStatus === 'pending' ? C.orange : uiStatus === 'active' ? C.blue : C.green }]}>
+            <Text style={[s.badgeTxt, { color: uiStatus === 'pendiente' ? CC.blue : uiStatus === 'pending' ? CC.orange : uiStatus === 'active' ? CC.blue : CC.green }]}>
               {uiStatus === 'pendiente' ? 'PENDIENTE' : uiStatus === 'pending' ? 'ASIGNADO' : uiStatus === 'active' ? 'EN CAMINO' : 'COMPLETADO ✓'}
             </Text>
           </View>
