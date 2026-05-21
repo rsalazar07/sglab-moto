@@ -1,4 +1,5 @@
 const LOG_URL = 'https://recojossglab.duckdns.org/api/logs/device';
+const LOG_URL_LOCAL = 'http://81.17.100.158:3456/api/logs/device';
 const BATCH_SIZE = 10;
 const FLUSH_INTERVAL = 5000; // 5 segundos
 
@@ -37,6 +38,8 @@ async function flush() {
   if (buffer.length === 0) return;
 
   const batch = buffer.splice(0);
+  const body = JSON.stringify(batch.length === 1 ? batch[0] : batch);
+
   try {
     const controller = new AbortController();
     const timeout = setTimeout(() => controller.abort(), 5000);
@@ -44,7 +47,7 @@ async function flush() {
     const res = await fetch(LOG_URL, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(batch.length === 1 ? batch[0] : batch),
+      body,
       signal: controller.signal,
     });
 
@@ -54,9 +57,17 @@ async function flush() {
       console.warn('[LogReporter] flush failed:', res.status);
     }
   } catch (e) {
-    // Silencio total - no queremos que el log reporter cause errores
     console.warn('[LogReporter] network error:', e);
   }
+
+  // También enviar al server local (fire & forget)
+  try {
+    fetch(LOG_URL_LOCAL, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body,
+    }).catch(() => {});
+  } catch {}
 }
 
 function scheduleFlush() {
