@@ -5,6 +5,7 @@ import { View, Text, ActivityIndicator } from 'react-native';
 import * as SecureStore from 'expo-secure-store';
 import { useAuthStore } from '../src/store/authStore';
 import { authApi } from '../src/api/auth';
+import { send as log } from '../src/lib/LogReporter';
 
 export default function RootLayout() {
   const { setUser } = useAuthStore();
@@ -18,7 +19,8 @@ export default function RootLayout() {
           const user = await authApi.me();
           setUser(user);
         }
-      } catch {
+      } catch (e) {
+        log('ERROR', 'auth', `_layout init: ${e instanceof Error ? e.message : String(e)}`);
         await SecureStore.deleteItemAsync('accessToken');
         await SecureStore.deleteItemAsync('refreshToken');
       } finally {

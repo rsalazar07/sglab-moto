@@ -8,6 +8,7 @@ import { ticketsApi } from '../../src/api/tickets';
 import { api } from '../../src/api/client';
 import { disconnectSocket } from '../../src/socket/socket';
 import { deactivateKeepAwake } from 'expo-keep-awake';
+import { send as log } from '../../src/lib/LogReporter';
 
 const C = {
   blue:'#4BBFE0', blueDark:'#2fa8cc', blueLight:'#EBF7FC',
@@ -33,7 +34,9 @@ export default function DiaScreen() {
       ]);
       setMotoData(moto);
       setTickets(tks);
-    } catch {}
+    } catch (e) {
+      log('ERROR', 'dia', `cargar inicial: ${e instanceof Error ? e.message : String(e)}`);
+    }
   }, []);
 
   useEffect(() => { cargar(); }, []);
@@ -55,7 +58,7 @@ export default function DiaScreen() {
       { text: 'Cerrar sesión', style: 'destructive', onPress: async () => {
         deactivateKeepAwake();
         disconnectSocket();
-        try { await api.patch('/motorizados/me/estado', { estado: 'OFFLINE' }); } catch {}
+        try { await api.patch('/motorizados/me/estado', { estado: 'OFFLINE' }); } catch (e) { log('WARN', 'dia', 'Error estado OFFLOAD: ' + String(e)); }
         await authApi.logout();
         clearUser();
         router.replace('/login');

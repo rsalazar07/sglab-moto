@@ -18,6 +18,25 @@ api.interceptors.response.use(
   (res) => res,
   async (error) => {
     const original = error.config;
+    // Loggear errores de API automáticamente
+    const url = original?.url || 'unknown';
+    const status = error.response?.status || 'network';
+    const data = error.response?.data;
+    const errMsg = error.message || 'unknown';
+
+    try {
+      const logUrl = `${BASE_URL}/logs`;
+      await fetch(logUrl, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          level: 'ERROR',
+          tag: 'api',
+          message: `${status} ${url}${data ? ':' + JSON.stringify(data).slice(0,200) : ''} — ${errMsg}`,
+        }),
+      });
+    } catch {}
+
     if (error.response?.status === 401 && !original._retry) {
       original._retry = true;
       try {

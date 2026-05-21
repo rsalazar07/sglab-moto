@@ -14,6 +14,7 @@ import { getSocket, disconnectSocket } from '../../src/socket/socket';
 import { authApi } from '../../src/api/auth';
 import { api } from '../../src/api/client';
 import { router } from 'expo-router';
+import { send as log } from '../../src/lib/LogReporter';
 import type { Ticket, EstadoTicket } from '../../src/types';
 
 const C = {
@@ -95,6 +96,7 @@ export default function TicketsScreen() {
       setTickets(data);
     } catch (e) {
       console.error('Error cargando tickets:', e);
+      log('ERROR', 'tickets', `cargarTickets: ${e instanceof Error ? e.message : String(e)}`);
     }
   }, []);
 
@@ -129,7 +131,7 @@ export default function TicketsScreen() {
     await startTracking();
     setTurnoActivo(true);
     setEstadoMoto('DISPONIBLE');
-    try { await api.patch(`/motorizados/me/estado`, { estado: 'DISPONIBLE' }); } catch {}
+    try { await api.patch(`/motorizados/me/estado`, { estado: 'DISPONIBLE' }); } catch { log('WARN', 'turno', 'Error al iniciar estado DISPONIBLE'); }
   };
 
   const finalizarTurno = async () => {
@@ -137,7 +139,7 @@ export default function TicketsScreen() {
     deactivateKeepAwake();
     setTurnoActivo(false);
     setEstadoMoto('OFF_LINE');
-    try { await api.patch(`/motorizados/me/estado`, { estado: ESTADOS_MOTO.OFF_LINE.backendEstado }); } catch {}
+    try { await api.patch(`/motorizados/me/estado`, { estado: ESTADOS_MOTO.OFF_LINE.backendEstado }); } catch { log('WARN', 'turno', 'Error al finalizar estado'); }
   };
 
   const logout = () => {
@@ -171,6 +173,7 @@ export default function TicketsScreen() {
         setRegistroModal(true);
       } catch (e: any) {
         const msg = e.response?.data?.message;
+        log('ERROR', 'avanzarEstado', `EN_RECOJO: ${e?.response?.data ? JSON.stringify(e.response.data) : e?.message || 'unknown'}`);
         Alert.alert('Error', Array.isArray(msg) ? msg[0] : msg ?? 'Error al actualizar');
       } finally {
         setLoadingId(null);
@@ -187,6 +190,7 @@ export default function TicketsScreen() {
         await cargarTickets();
       } catch (e: any) {
         const msg = e.response?.data?.message;
+        log('ERROR', 'avanzarEstado', `tomarTicket: ${e?.response?.data ? JSON.stringify(e.response.data) : e?.message || 'unknown'}`);
         Alert.alert('Error', Array.isArray(msg) ? msg[0] : msg ?? 'No se pudo tomar el pedido');
       } finally {
         setLoadingId(null);
@@ -202,6 +206,7 @@ export default function TicketsScreen() {
       await cargarTickets();
     } catch (e: any) {
       const msg = e.response?.data?.message;
+      log('ERROR', 'avanzarEstado', `EN_RUTA: ${e?.response?.data ? JSON.stringify(e.response.data) : e?.message || 'unknown'}`);
       Alert.alert('Error', Array.isArray(msg) ? msg[0] : msg ?? 'No se pudo actualizar');
     } finally {
       setLoadingId(null);
@@ -253,7 +258,7 @@ export default function TicketsScreen() {
         fotoUrl = url;
       } catch (e) {
         console.error('[completarRecojo] Error subiendo evidencia:', e);
-        // Si falla la foto, no bloqueamos el resto, pero avisamos
+        log('ERROR', 'completarRecojo', `subirEvidencia: ${e instanceof Error ? e.message : String(e)}`);
       }
     }
 
@@ -266,6 +271,7 @@ export default function TicketsScreen() {
         });
       } catch (e) {
         console.error('[completarRecojo] Error registrando cobro:', e);
+        log('ERROR', 'completarRecojo', `registrarCobro: ${e instanceof Error ? e.message : String(e)}`);
       }
     }
 
@@ -278,6 +284,7 @@ export default function TicketsScreen() {
         });
       } catch (e) {
         console.error('[completarRecojo] Error guardando registro vacío:', e);
+        log('ERROR', 'completarRecojo', `guardarRegistro(sinInfo): ${e instanceof Error ? e.message : String(e)}`);
       }
     } else if (refNombre || observaciones || fotoUrl) {
       try {
@@ -288,6 +295,7 @@ export default function TicketsScreen() {
         });
       } catch (e) {
         console.error('[completarRecojo] Error guardando registro:', e);
+        log('ERROR', 'completarRecojo', `guardarRegistro: ${e instanceof Error ? e.message : String(e)}`);
       }
     }
 
@@ -305,6 +313,7 @@ export default function TicketsScreen() {
       }
     } catch (e: any) {
       const msg = e.response?.data?.message;
+      log('ERROR', 'completarRecojo', `updateEstado RECOGIDO: ${e?.response?.data ? JSON.stringify(e.response.data) : e?.message || 'unknown'}`);
       Alert.alert('Error', Array.isArray(msg) ? msg[0] : msg ?? 'No se pudo completar el recojo');
     }
 
@@ -334,7 +343,7 @@ export default function TicketsScreen() {
     } else if (!turnoActivo) {
       await iniciarTurno();
     }
-    try { await api.patch(`/motorizados/me/estado`, { estado: e.backendEstado }); } catch {}
+    try { await api.patch(`/motorizados/me/estado`, { estado: e.backendEstado }); } catch { log('WARN', 'turno', 'Error al confirmar estado moto'); }
   };
 
   // Separar tickets por grupo
