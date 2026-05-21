@@ -44,7 +44,7 @@ export const ticketsApi = {
 
   guardarRegistro: async (
     ticketId: string,
-    registro: { refNombre?: string; observaciones?: string; fotoUrl?: string }
+    registro: { refNombre?: string; observaciones?: string; fotoUrl?: string; sinInfo?: boolean }
   ): Promise<any> => {
     const { data } = await api.post(`/tickets/${ticketId}/registro`, registro);
     return data;

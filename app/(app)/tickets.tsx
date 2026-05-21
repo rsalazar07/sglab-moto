@@ -217,22 +217,22 @@ export default function TicketsScreen() {
   };
 
   // Al presionar "Confirmar recojo" en el formulario
-  // Solo pide confirmación si el usuario no ingresó ningún dato
+  // Si no hay datos, pregunta si quiere continuar sin registrar
   const intentarConfirmar = () => {
     const tieneData = fotoUri || refNombre.trim() || observaciones.trim();
     if (!tieneData) {
       setConfirmModal(true);
     } else {
       setRegistroModal(false);
-      completarRecojo();
+      completarRecojo(false);
     }
   };
 
-  // Presionó "Sí" en el alert → confirmar sin eventualidades
+  // Presionó "Sí" en el alert → confirmar sin datos
   const confirmarSinEventualidades = async () => {
     setConfirmModal(false);
     setRegistroModal(false);
-    await completarRecojo();
+    await completarRecojo(true);  // sinInfo = true
   };
 
   // Presionó "No" → volver al formulario
@@ -240,7 +240,7 @@ export default function TicketsScreen() {
     setConfirmModal(false);
   };
 
-  const completarRecojo = async () => {
+  const completarRecojo = async (sinInfo: boolean = false) => {
     const id = currentTicketId.current;
     if (!id) return;
     setSubiendo(true);
@@ -253,6 +253,7 @@ export default function TicketsScreen() {
         fotoUrl = url;
       } catch (e) {
         console.error('[completarRecojo] Error subiendo evidencia:', e);
+        // Si falla la foto, no bloqueamos el resto, pero avisamos
       }
     }
 
@@ -268,8 +269,17 @@ export default function TicketsScreen() {
       }
     }
 
-    // 3. Guardar registro si hay datos
-    if (refNombre || observaciones || fotoUrl) {
+    // 3. Guardar registro
+    if (sinInfo) {
+      // Guardar registro vacío con flag para que el admin sepa
+      try {
+        await ticketsApi.guardarRegistro(id, {
+          sinInfo: true,
+        });
+      } catch (e) {
+        console.error('[completarRecojo] Error guardando registro vacío:', e);
+      }
+    } else if (refNombre || observaciones || fotoUrl) {
       try {
         await ticketsApi.guardarRegistro(id, {
           refNombre,
@@ -285,6 +295,14 @@ export default function TicketsScreen() {
     try {
       await ticketsApi.updateEstado(id, 'RECOGIDO');
       await cargarTickets();
+      // Mostrar mensaje de éxito según el caso
+      if (sinInfo) {
+        Alert.alert('✅ Recojo completado', 'El registro se guardó sin información adicional.');
+      } else if (fotoUri || refNombre || observaciones || (metodoPago && metodoPago !== 'SIN_PAGO')) {
+        Alert.alert('✅ Registro guardado', 'Los datos del recojo se guardaron correctamente.');
+      } else {
+        Alert.alert('✅ Recojo completado', 'El ticket se marcó como recogido.');
+      }
     } catch (e: any) {
       const msg = e.response?.data?.message;
       Alert.alert('Error', Array.isArray(msg) ? msg[0] : msg ?? 'No se pudo completar el recojo');
@@ -632,9 +650,9 @@ export default function TicketsScreen() {
         <View style={[s.overlay, { alignItems: 'center', justifyContent: 'center' }]}>
           <View style={s.alertBox}>
             <Text style={s.alertIc}>📋</Text>
-            <Text style={s.alertTitle}>¿Estás seguro de continuar?</Text>
+            <Text style={s.alertTitle}>¿Deseas continuar sin registrar información?</Text>
             <Text style={s.alertBody}>
-              El registro se guardará sin datos adicionales.
+              Si tienes foto, nombre o notas que agregar, puedes volver al formulario y completarlos.
             </Text>
             <TouchableOpacity style={[s.confirmBtn, { backgroundColor: C.blue, marginTop: 16 }]} onPress={confirmarSinEventualidades}>
               <Text style={s.confirmBtnTxt}>Sí, confirmar recojo</Text>
