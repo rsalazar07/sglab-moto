@@ -39,6 +39,7 @@ export default function TicketsScreen() {
   const [turnoActivo, setTurnoActivo] = useState(false);
   const [loadingId, setLoadingId] = useState<string | null>(null);
   const [estadoMoto, setEstadoMoto] = useState<string>('DISPONIBLE');
+  const [flowCache, setFlowCache] = useState<Record<string, any>>({});
 
   // Modales
   const [estadoModal, setEstadoModal] = useState(false);
@@ -61,6 +62,15 @@ export default function TicketsScreen() {
     try {
       const data = await ticketsApi.getMisTickets();
       setTickets(data);
+      // Pre-cargar flows para todos los tickets (asíncrono, no bloquea al render)
+      const fc: Record<string, any> = {};
+      for (const t of data) {
+        try {
+          const res = await api.get(`/tickets/${t.id}/flow`);
+          fc[t.id] = res.data;
+        } catch {}
+      }
+      setFlowCache(fc);
     } catch (e) {
       console.error('Error cargando tickets:', e);
       log('ERROR', 'tickets', `cargarTickets: ${e instanceof Error ? e.message : String(e)}`);
@@ -159,10 +169,6 @@ export default function TicketsScreen() {
 
   // Avanzar estado de ticket
   const avanzarEstado = async (ticket: Ticket) => {
-    const tf = config?.ticketFlow || {};
-    const uiStatus = tf[ticket.estado] || 'done';
-    if (uiStatus === 'done') return;
-
     try {
       // Obtener flow del backend
       const flowRes = await api.get(`/tickets/${ticket.id}/flow`);
@@ -469,7 +475,19 @@ export default function TicketsScreen() {
         )}
 
         {isDone && (
-          <Text style={[s.doneTag, { color: CC.green }]}>✅ Completado · {item.horaLimite ? new Date(item.horaLimite).toLocaleTimeString('es-PE',{hour:'2-digit',minute:'2-digit'}) : ''}</Text>
+          <View>
+            <Text style={[s.doneTag, { color: CC.green }]}>✅ Completado · {item.horaLimite ? new Date(item.horaLimite).toLocaleTimeString('es-PE',{hour:'2-digit',minute:'2-digit'}) : ''}</Text>
+            {flowCache[item.id]?.boton && (
+              <TouchableOpacity
+                style={[s.abtn, { backgroundColor: flowCache[item.id].boton.color || CC.blue }, cargando && { opacity: 0.6 }]}
+                onPress={() => avanzarEstado(item)}
+                disabled={cargando}
+                activeOpacity={0.82}
+              >
+                <Text style={s.abtnTxt}>{cargando ? 'Actualizando...' : flowCache[item.id].boton.label}</Text>
+              </TouchableOpacity>
+            )}
+          </View>
         )}
       </View>
     );
