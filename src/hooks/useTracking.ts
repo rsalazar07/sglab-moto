@@ -7,7 +7,6 @@
  * - WebSocket para puntos en tiempo real + REST como fallback.
  * - Los puntos WebSocket auto-crean sesión en el backend (con estado OCUPADO).
  * - Solo se detiene al llamar stopTracking() (Fin turno).
- * - Intervalo y textos NOTIFICACIÓN vienen del VPS.
  */
 
 import { useRef, useCallback } from 'react';
@@ -18,18 +17,7 @@ import { getSocket } from '../socket/socket';
 import { api } from '../api/client';
 
 const TASK = 'SGLAB_GPS_TASK';
-const DEFAULT_INTERVAL_MS = 5000;
-
-// Cache de config (se carga una vez)
-let _config: any = null;
-const loadConfig = async () => {
-  if (_config) return _config;
-  try {
-    const res = await api.get('/motorizados/config');
-    _config = res.data || {};
-    return _config;
-  } catch { return {}; }
-};
+const INTERVAL_MS = 5000; // cada 5 segundos
 
 // ─── Task de background (corre aunque app esté en background) ──
 TaskManager.defineTask(TASK, async ({ data, error }: any) => {
@@ -52,17 +40,10 @@ export const useTracking = () => {
     if (active.current) return true;
 
     try {
-      // Cargar config del VPS para parámetros
-      const cfg = await loadConfig();
-      const intervalMs = cfg?.tiemposMaquina?.trackingIntervalMs || DEFAULT_INTERVAL_MS;
-      const d = cfg?.dashboard || {};
-      const notifTitle = d.trackingTitle || '🏍️ SGLab Moto activo';
-      const notifBody = d.trackingBody || 'Enviando ubicación en tiempo real';
-      const notifColor = d.trackingColor || d.colors?.blue || '#00d4ff';
-
       // 1. Permiso foreground
       const fg = await Location.requestForegroundPermissionsAsync();
       if (fg.status !== 'granted') {
+        // Intentar pedir de nuevo
         const fg2 = await Location.requestForegroundPermissionsAsync();
         if (fg2.status !== 'granted') {
           console.warn('[Tracking] Permiso GPS denegado');
@@ -96,7 +77,7 @@ export const useTracking = () => {
             await api.post('/tracking/point', payload);
           }
         } catch {}
-      }, intervalMs);
+      }, INTERVAL_MS);
 
       // 5. Background task (para cuando minimizan/bloquean)
       const bg = await Location.requestBackgroundPermissionsAsync();
@@ -106,13 +87,13 @@ export const useTracking = () => {
 
         await Location.startLocationUpdatesAsync(TASK, {
           accuracy: Location.Accuracy.High,
-          timeInterval: intervalMs,
+          timeInterval: INTERVAL_MS,
           distanceInterval: 10,
           showsBackgroundLocationIndicator: true,
           foregroundService: {
-            notificationTitle: notifTitle,
-            notificationBody: notifBody,
-            notificationColor: notifColor,
+            notificationTitle: '🏍️ SGLab Moto activo',
+            notificationBody: 'Enviando ubicación en tiempo real',
+            notificationColor: '#00d4ff',
           },
           pausesUpdatesAutomatically: false,
           activityType: Location.ActivityType.AutomotiveNavigation,
