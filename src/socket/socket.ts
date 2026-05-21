@@ -37,6 +37,16 @@ export const getSocket = async (onSessionRevoked?: () => void): Promise<Socket> 
     if (onSessionRevoked) onSessionRevoked();
   });
 
+  // 📨 Escuchar mensajes del administrador en tiempo real
+  socket.on('admin:message', (data) => {
+    console.warn('[Socket] Mensaje del admin:', data?.message);
+    Alert.alert(
+      data?.title || '📢 Administrador',
+      data?.message || '',
+      [{ text: 'OK' }]
+    );
+  });
+
   return socket;
 };
 
