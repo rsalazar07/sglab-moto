@@ -49,7 +49,7 @@ const BOTON_COLOR: Record<string, string> = {
 function mapStatus(estado: EstadoTicket): 'pendiente' | 'pending' | 'active' | 'done' {
   if (['PENDIENTE'].includes(estado)) return 'pendiente';
   if (['ASIGNADO'].includes(estado)) return 'pending';
-  if (['EN_RUTA','EN_RECOJO','RECOGIDO'].includes(estado)) return 'active';
+  if (['EN_RUTA','EN_RECOJO'].includes(estado)) return 'active';
   return 'done';
 }
 
