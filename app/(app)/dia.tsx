@@ -10,14 +10,14 @@ import { disconnectSocket } from '../../src/socket/socket';
 import { deactivateKeepAwake } from 'expo-keep-awake';
 import { send as log } from '../../src/lib/LogReporter';
 
-const C = {
-  blue:'#4BBFE0', blueDark:'#2fa8cc', blueLight:'#EBF7FC',
-  gray:'#8C8C8C', grayLight:'#F5F6F8', grayBorder:'#E8E8E8',
-  text:'#1a1a2e', text2:'#6b7280',
-  green:'#2ECC71', greenLight:'#EAFAF1',
-  orange:'#F39C12', orangeLight:'#FEF9EC',
-  red:'#E74C3C', redLight:'#FEF0EF',
-  white:'#FFFFFF',
+// ═══════════════════════════════════════════════════════════════
+// Colores por defecto (fallback si no carga config del VPS)
+// Se sobreescriben al cargar GET /motorizados/config
+// ═══════════════════════════════════════════════════════════════
+const FALLBACK = {
+  blue:'#4BBFE0', gray:'#8C8C8C', green:'#2ECC71', orange:'#F39C12', red:'#E74C3C', white:'#FFFFFF',
+  text:'#1a1a2e', text2:'#6b7280', grayLight:'#F5F6F8', blueDark:'#2fa8cc', blueLight:'#EBF7FC',
+  grayBorder:'#E8E8E8', greenLight:'#EAFAF1', orangeLight:'#FEF9EC', redLight:'#FEF0EF',
 };
 
 export default function DiaScreen() {
@@ -25,6 +25,23 @@ export default function DiaScreen() {
   const clearUser = useAuthStore((s) => s.clearUser);
   const [motoData, setMotoData] = useState<any>(null);
   const [tickets, setTickets] = useState<any[]>([]);
+  const [C, setC] = useState(FALLBACK);
+  const [dash, setDash] = useState<any>(null);
+
+  // Cargar config visual del VPS
+  useEffect(() => {
+    api.get('/motorizados/config')
+      .then(r => {
+        const cfg = r.data;
+        if (cfg?.dashboard?.colors) {
+          setC({ ...FALLBACK, ...cfg.dashboard.colors });
+        }
+        if (cfg?.dashboard) {
+          setDash(cfg.dashboard);
+        }
+      })
+      .catch(() => { /* usa fallback */ });
+  }, []);
 
   const cargar = useCallback(async () => {
     try {
@@ -47,10 +64,13 @@ export default function DiaScreen() {
   const pct = total > 0 ? Math.round((done / total) * 100) : 0;
   const circumference = 182;
   const offset = circumference - (circumference * pct / 100);
-  const ringColor = pct === 100 ? C.green : C.blue;
+  const ringColor = pct === 100 ? (dash?.progresoColor100 || C.green) : (dash?.progresoColor || C.blue);
 
   const fecha = new Date().toLocaleDateString('es-PE', { weekday:'long', day:'numeric', month:'long' });
   const fechaFmt = fecha.charAt(0).toUpperCase() + fecha.slice(1);
+
+  const completadoColor = dash?.completadoColor || C.green;
+  const pendienteColor = dash?.pendienteColor || C.orange;
 
   const logout = () => {
     Alert.alert('Cerrar sesión', '¿Seguro que quieres cerrar sesión?', [
@@ -72,7 +92,7 @@ export default function DiaScreen() {
       {/* Header con mini logo */}
       <View style={d.header}>
         <View style={d.mlogo}>
-          <View style={d.mlogoIc}><Text style={{ fontSize: 14 }}>🔬</Text></View>
+          <View style={[d.mlogoIc, { backgroundColor: C.blue }]}><Text style={{ fontSize: 14 }}>🔬</Text></View>
           <Text style={d.mlogoTxt}>
             <Text style={{ color: C.gray }}>SG</Text>
             <Text style={{ color: C.blue }}>Lab's</Text>
@@ -86,7 +106,7 @@ export default function DiaScreen() {
 
         {/* Card progreso */}
         <View style={d.card}>
-          <Text style={d.cardTitle}>📈 Progreso del turno</Text>
+          <Text style={d.cardTitle}>{dash?.progresoTitle || '📈 Progreso del turno'}</Text>
 
           <View style={d.ringWrap}>
             {/* Anillo SVG simulado con View */}
@@ -105,16 +125,16 @@ export default function DiaScreen() {
 
             <View style={d.ringStats}>
               <View style={d.prow}>
-                <Text style={d.plbl}>Total tickets</Text>
+                <Text style={d.plbl}>{dash?.totalLabel || 'Total tickets'}</Text>
                 <Text style={d.pval}>{total}</Text>
               </View>
               <View style={d.prow}>
-                <Text style={[d.plbl, { color: C.green }]}>✅ Completados</Text>
-                <Text style={[d.pval, { color: C.green }]}>{done}</Text>
+                <Text style={[d.plbl, { color: completadoColor }]}>{dash?.completadosLabel || '✅ Completados'}</Text>
+                <Text style={[d.pval, { color: completadoColor }]}>{done}</Text>
               </View>
               <View style={d.prow}>
-                <Text style={[d.plbl, { color: C.orange }]}>⏳ Pendientes</Text>
-                <Text style={[d.pval, { color: C.orange }]}>{pending}</Text>
+                <Text style={[d.plbl, { color: pendienteColor }]}>{dash?.pendientesLabel || '⏳ Pendientes'}</Text>
+                <Text style={[d.pval, { color: pendienteColor }]}>{pending}</Text>
               </View>
             </View>
           </View>
@@ -172,7 +192,7 @@ const d = StyleSheet.create({
   root: { flex:1, backgroundColor:'#F5F6F8' },
   header: { backgroundColor:'#fff', padding:16, borderBottomWidth:1, borderBottomColor:'#E8E8E8' },
   mlogo: { flexDirection:'row', alignItems:'center', gap:7, marginBottom:10 },
-  mlogoIc: { width:28, height:28, backgroundColor:'#4BBFE0', borderRadius:8, alignItems:'center', justifyContent:'center' },
+  mlogoIc: { width:28, height:28, borderRadius:8, alignItems:'center', justifyContent:'center' },
   mlogoTxt: { fontSize:14, fontWeight:'800' },
   title: { fontSize:22, fontWeight:'800', color:'#1a1a2e' },
   sub: { fontSize:11, color:'#8C8C8C', marginTop:2 },
@@ -180,9 +200,9 @@ const d = StyleSheet.create({
   card: { backgroundColor:'#fff', borderRadius:14, padding:16, shadowColor:'#000', shadowOpacity:0.04, shadowRadius:4, elevation:2 },
   cardTitle: { fontSize:10, fontWeight:'700', color:'#8C8C8C', textTransform:'uppercase', letterSpacing:0.8, marginBottom:14 },
   ringWrap: { flexDirection:'row', alignItems:'center', gap:16, marginBottom:14 },
-  ringOuter: { width:80, height:80, borderRadius:40, backgroundColor:'#F5F6F8', alignItems:'center', justifyContent:'center', position:'relative' },
+  ringOuter: { width:80, height:80, borderRadius:40, alignItems:'center', justifyContent:'center', position:'relative' },
   ringInner: { width:80, height:80, borderRadius:40, borderWidth:7, alignItems:'center', justifyContent:'center' },
-  ringFill: { position:'absolute', width:80, height:80, borderRadius:40, borderWidth:7, borderColor:'#4BBFE0', borderTopColor:'transparent', borderRightColor:'transparent' },
+  ringFill: { position:'absolute', width:80, height:80, borderRadius:40, borderWidth:7, borderTopColor:'transparent', borderRightColor:'transparent' },
   ringCenter: { position:'absolute', alignItems:'center' },
   ringPct: { fontSize:16, fontWeight:'800' },
   ringLbl: { fontSize:7, color:'#8C8C8C', fontWeight:'600', textTransform:'uppercase' },
