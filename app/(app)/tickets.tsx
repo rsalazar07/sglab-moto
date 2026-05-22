@@ -360,13 +360,20 @@ export default function TicketsScreen() {
     const isDone = uiStatus === 'done';
     const borderColor = uiStatus === 'pendiente' ? C.blue : uiStatus === 'pending' ? C.orange : uiStatus === 'active' ? C.blue : C.green;
 
-    // ─── Labels desde config (SDUI) ───
-    const badgeLabels: Record<string, string> = {
-      pendiente: UL.badgePendiente || '📋 PENDIENTE',
-      pending: UL.badgeAsignado || '🔄 ASIGNADO',
-      active: UL.badgeEnRuta || '🏍️ EN RUTA',
-      done: UL.badgeCompletado || '✅ RECOGIDO',
+    // ─── Labels desde config (SDUI) — por estado REAL no por uiStatus ───
+    const estadoLabels: Record<string, string> = {
+      PENDIENTE: UL.badgePendiente || '📋 PENDIENTE',
+      ASIGNADO: UL.badgeAsignado || '🔄 ASIGNADO',
+      EN_RUTA: UL.badgeEnRuta || '🏍️ EN RUTA',
+      EN_RECOJO: UL.badgeEnRecojo || UL.badgeEnRuta || '🏍️ EN RUTA',
+      RECOGIDO: UL.badgeRecogido || '🔵 RECOGIDO',
+      EN_LABORATORIO: UL.badgeEnLaboratorio || '🧪 EN LAB',
+      ENTREGADO: UL.badgeEntregado || '✅ ENTREGADO',
+      CERRADO: UL.badgeCerrado || '🔒 CERRADO',
+      CANCELADO: UL.badgeCancelado || '❌ CANCELADO',
+      FALLIDO: UL.badgeFallido || '⚠️ FALLIDO',
     };
+    const badgeLabel = estadoLabels[item.estado] || item.estado;
     const btnLabels: Record<string, string> = {
       pendiente: UL.btnTomarPedido || '📋 Tomar pedido',
       pending: UL.btnVoyAhora || '🏍️ Voy ahora',
@@ -390,12 +397,12 @@ export default function TicketsScreen() {
         <View style={s.tcTop}>
           <Text style={[s.tcId, { fontSize: fs.micro || 9 }]}>#{item.id.slice(-6).toUpperCase()}</Text>
           <View style={[s.badge, {
-            backgroundColor: uiStatus === 'pendiente' ? C.blueLight : uiStatus === 'pending' ? C.orangeLight : uiStatus === 'active' ? C.blueLight : C.greenLight,
-            borderColor: uiStatus === 'pendiente' ? C.blueBorder : uiStatus === 'pending' ? C.orange : uiStatus === 'active' ? C.blueBorder : C.green,
+            backgroundColor: uiStatus === 'pendiente' ? C.blueLight : uiStatus === 'pending' ? C.orangeLight : uiStatus === 'active' ? C.blueLight : C.grayLight,
+            borderColor: uiStatus === 'pendiente' ? C.blueBorder : uiStatus === 'pending' ? C.orange : uiStatus === 'active' ? C.blueBorder : C.gray,
             borderRadius: DT?.borderRadius?.badge ?? 6,
           }]}>
-            <Text style={[s.badgeTxt, { fontSize: fs.badge || 11, color: uiStatus === 'pendiente' ? C.blue : uiStatus === 'pending' ? C.orange : uiStatus === 'active' ? C.blue : C.green }]}>
-              {badgeLabels[uiStatus]}
+            <Text style={[s.badgeTxt, { fontSize: fs.badge || 11, color: uiStatus === 'pendiente' ? C.blue : uiStatus === 'pending' ? C.orange : uiStatus === 'active' ? C.blue : C.gray }]}>
+              {badgeLabel}
             </Text>
           </View>
         </View>
@@ -404,7 +411,7 @@ export default function TicketsScreen() {
           <Text style={[s.tcRef, { fontSize: fs.caption || 12 }]}>📍 {item.referencia.nombre}</Text>
         )}
 
-        <Text style={[s.tcType, { fontSize: fs.body || 14 }]}>{item.referencia?.nombre ?? 'Muestra'}</Text>
+        <Text style={[s.tcType, { fontSize: fs.body || 14 }]}>{item.tipoMuestra || item.tipo || item.referencia?.nombre || 'Muestra'}</Text>
         <Text style={[s.tcAddr, { fontSize: fs.small || 10 }]}>{item.referencia?.direccion ?? ''}</Text>
         {item.referencia?.telefono && (
           <Text style={[s.tcPhone, { fontSize: fs.micro || 9 }]}>📞 {item.referencia.telefono}</Text>
@@ -434,7 +441,7 @@ export default function TicketsScreen() {
         )}
 
         {isDone && (
-          <Text style={[s.doneTag, { fontSize: fs.small || 10 }]}>✅ {UL.doneTag || 'Completado'} · {new Date(item.updatedAt || item.createdAt).toLocaleTimeString('es-PE',{hour:'2-digit',minute:'2-digit'})}</Text>
+          <Text style={[s.doneTag, { fontSize: fs.small || 10 }]}>✅ {badgeLabel}</Text>
         )}
       </View>
     );
