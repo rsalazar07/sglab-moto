@@ -7,6 +7,7 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { activateKeepAwakeAsync, deactivateKeepAwake } from 'expo-keep-awake';
 import * as ImagePicker from 'expo-image-picker';
+import * as FileSystem from 'expo-file-system';
 import { ticketsApi } from '../../src/api/tickets';
 import { useTracking } from '../../src/hooks/useTracking';
 import { useAuthStore } from '../../src/store/authStore';
@@ -261,14 +262,15 @@ export default function TicketsScreen() {
     if (!id) return;
     setSubiendo(true);
 
-    let fotoUrl: string | undefined;
+    let fotoBase64: string | undefined;
     if (fotoUri) {
       try {
-        const { url } = await ticketsApi.subirEvidencia(id, fotoUri);
-        fotoUrl = url;
+        fotoBase64 = await FileSystem.readAsStringAsync(fotoUri, {
+          encoding: FileSystem.EncodingType.Base64,
+        });
       } catch (e) {
-        console.error('[completarRecojo] Error subiendo evidencia:', e);
-        log('ERROR', 'completarRecojo', `subirEvidencia: ${e instanceof Error ? e.message : String(e)}`);
+        console.error('[completarRecojo] Error leyendo foto:', e);
+        log('ERROR', 'completarRecojo', `leerFoto: ${e instanceof Error ? e.message : String(e)}`);
       }
     }
 
@@ -291,9 +293,9 @@ export default function TicketsScreen() {
         console.error('[completarRecojo] Error guardando registro vacío:', e);
         log('ERROR', 'completarRecojo', `guardarRegistro(sinInfo): ${e instanceof Error ? e.message : String(e)}`);
       }
-    } else if (refNombre || observaciones || fotoUrl) {
+    } else if (refNombre || observaciones || fotoBase64) {
       try {
-        await ticketsApi.guardarRegistro(id, { refNombre, observaciones, fotoUrl });
+        await ticketsApi.guardarRegistro(id, { refNombre, observaciones, fotoBase64 });
       } catch (e) {
         console.error('[completarRecojo] Error guardando registro:', e);
         log('ERROR', 'completarRecojo', `guardarRegistro: ${e instanceof Error ? e.message : String(e)}`);
