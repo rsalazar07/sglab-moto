@@ -2,12 +2,11 @@ import { useEffect, useState, useCallback, useRef } from 'react';
 import {
   View, Text, FlatList, TouchableOpacity, StyleSheet,
   RefreshControl, Alert, Modal, TextInput, ScrollView,
-  ActivityIndicator, Image, Linking,
+  ActivityIndicator, Image,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { activateKeepAwakeAsync, deactivateKeepAwake } from 'expo-keep-awake';
 import * as ImagePicker from 'expo-image-picker';
-import * as FileSystem from 'expo-file-system/legacy';
 import { ticketsApi } from '../../src/api/tickets';
 import { useTracking } from '../../src/hooks/useTracking';
 import { useAuthStore } from '../../src/store/authStore';
@@ -18,13 +17,14 @@ import { router } from 'expo-router';
 import { send as log } from '../../src/lib/LogReporter';
 import type { Ticket, EstadoTicket } from '../../src/types';
 
-const C = {
-  blue:'#4BBFE0', blueDark:'#2fa8cc', blueLight:'#EBF7FC', blueBorder:'#c8ebf7',
-  gray:'#8C8C8C', grayLight:'#F5F6F8', grayBorder:'#E8E8E8',
-  text:'#1a1a2e', text2:'#6b7280',
-  green:'#2ECC71', greenLight:'#EAFAF1',
-  orange:'#F39C12', orangeLight:'#FEF9EC',
-  red:'#E74C3C', redLight:'#FEF0EF',
+// Colores por defecto (fallback si no hay config)
+const C_FALLBACK = {
+  blue:'#3498DB', blueDark:'#2980B9', blueLight:'#EBF5FB', blueBorder:'#AED6F1',
+  gray:'#7F8C8D', grayLight:'#F2F3F4', grayBorder:'#D5D8DC',
+  text:'#1a1a2e', text2:'#7F8C8D',
+  green:'#27AE60', greenLight:'#E8F8F0',
+  orange:'#E67E22', orangeLight:'#FDF2E9',
+  red:'#E74C3C', redLight:'#FDEDEC',
   white:'#FFFFFF',
 };
 
@@ -39,7 +39,6 @@ export default function TicketsScreen() {
   const [turnoActivo, setTurnoActivo] = useState(false);
   const [loadingId, setLoadingId] = useState<string | null>(null);
   const [estadoMoto, setEstadoMoto] = useState<string>('DISPONIBLE');
-  const [flowCache, setFlowCache] = useState<Record<string, any>>({});
 
   // Modales
   const [estadoModal, setEstadoModal] = useState(false);
@@ -58,19 +57,18 @@ export default function TicketsScreen() {
   const currentTicketId = useRef<string | null>(null);
   const { startTracking, stopTracking } = useTracking();
 
+  // ─── Leer configuración SDUI desde VPS ───
+  const C = config?.dashboard?.colors || C_FALLBACK;
+  const DT = config?.designTokens || {}; // designTokens
+  const UL = config?.uiLabels || {};     // uiLabels
+  const SC = config?.screenConfig || {}; // screenConfig
+  const screen = SC?.tickets || {};
+  const sections = SC?.sections || {};
+
   const cargarTickets = useCallback(async () => {
     try {
       const data = await ticketsApi.getMisTickets();
       setTickets(data);
-      // Pre-cargar flows para todos los tickets (asíncrono, no bloquea al render)
-      const fc: Record<string, any> = {};
-      for (const t of data) {
-        try {
-          const res = await api.get(`/tickets/${t.id}/flow`);
-          fc[t.id] = res.data;
-        } catch {}
-      }
-      setFlowCache(fc);
     } catch (e) {
       console.error('Error cargando tickets:', e);
       log('ERROR', 'tickets', `cargarTickets: ${e instanceof Error ? e.message : String(e)}`);
@@ -86,37 +84,11 @@ export default function TicketsScreen() {
     }
   }, []);
 
-  // Auto-start tracking al cargar la pantalla (login → disponible + GPS)
-  const autoStartRef = useRef(false);
-
-  useEffect(() => {
-    if (autoStartRef.current) return;
-    autoStartRef.current = true;
-
-    const autoStart = async () => {
-      try {
-        // Esperar que cargue config primero
-        await new Promise(r => setTimeout(r, 1500));
-        if (turnoActivo) return;
-        await activateKeepAwakeAsync();
-        await startTracking();
-        setTurnoActivo(true);
-        setEstadoMoto('DISPONIBLE');
-        await api.patch(`/motorizados/me/estado`, { estado: 'DISPONIBLE' });
-        log('INFO', 'tracking', 'Auto-start tracking al iniciar sesión');
-      } catch (e) {
-        log('WARN', 'tracking', `Auto-start falló: ${e instanceof Error ? e.message : String(e)}`);
-      }
-    };
-    autoStart();
-  }, []);
-
   useEffect(() => {
     cargarTickets();
     fetchConfig();
     const initSocket = async () => {
       const socket = await getSocket();
-      // Limpiar listeners previos antes de agregar nuevos (evita duplicados)
       socket.off('ticket:new', cargarTickets);
       socket.off('ticket:update', cargarTickets);
       socket.on('ticket:new', cargarTickets);
@@ -124,7 +96,6 @@ export default function TicketsScreen() {
     };
     initSocket();
     return () => {
-      // Solo remover nuestros listeners, no desconectar todo el socket
       getSocket().then((s) => {
         s.off('ticket:new', cargarTickets);
         s.off('ticket:update', cargarTickets);
@@ -169,8 +140,11 @@ export default function TicketsScreen() {
 
   // Avanzar estado de ticket
   const avanzarEstado = async (ticket: Ticket) => {
+    const tf = config?.ticketFlow || {};
+    const uiStatus = tf[ticket.estado] || 'done';
+    if (uiStatus === 'done') return;
+
     try {
-      // Obtener flow del backend
       const flowRes = await api.get(`/tickets/${ticket.id}/flow`);
       const flow = flowRes.data;
       const btn = flow.boton;
@@ -192,7 +166,6 @@ export default function TicketsScreen() {
       }
 
       if (btn.abreModal) {
-        // EN_RUTA o EN_RECOJO → abrir modal de registro
         if (ticket.estado === 'EN_RUTA' && btn.body) {
           await api.post(btn.endpoint!, btn.body);
         }
@@ -202,7 +175,6 @@ export default function TicketsScreen() {
         return;
       }
 
-      // Cualquier otra acción: llamar endpoint con body si existe
       setLoadingId(ticket.id);
       try {
         await (btn.body
@@ -216,7 +188,6 @@ export default function TicketsScreen() {
         Alert.alert('Error', Array.isArray(msg) ? msg[0] : msg ?? 'Error al actualizar');
       } finally { setLoadingId(null); }
     } catch (e: any) {
-      // Fallback: comportamiento antiguo
       log('WARN', 'avanzarEstado', `Flow API error, using fallback: ${e?.message}`);
       if (uiStatus === 'active') {
         setLoadingId(ticket.id);
@@ -265,8 +236,6 @@ export default function TicketsScreen() {
     setMonto('');
   };
 
-  // Al presionar "Confirmar recojo" en el formulario
-  // Si no hay datos, pregunta si quiere continuar sin registrar
   const intentarConfirmar = () => {
     const tieneData = fotoUri || refNombre.trim() || observaciones.trim();
     if (!tieneData) {
@@ -277,14 +246,12 @@ export default function TicketsScreen() {
     }
   };
 
-  // Presionó "Sí" en el alert → confirmar sin datos
   const confirmarSinEventualidades = async () => {
     setConfirmModal(false);
     setRegistroModal(false);
-    await completarRecojo(true);  // sinInfo = true
+    await completarRecojo(true);
   };
 
-  // Presionó "No" → volver al formulario
   const volverAlFormulario = () => {
     setConfirmModal(false);
   };
@@ -293,24 +260,18 @@ export default function TicketsScreen() {
     const id = currentTicketId.current;
     if (!id) return;
     setSubiendo(true);
-    let registroBase64: string | undefined;
 
-    // 1. Subir foto si hay (como base64)
     let fotoUrl: string | undefined;
     if (fotoUri) {
       try {
-        const base64 = await FileSystem.readAsStringAsync(fotoUri, {
-          encoding: 'base64',
-        });
-        // Enviar base64 en el registro en vez de subir foto aparte
-        registroBase64 = base64;
+        const { url } = await ticketsApi.subirEvidencia(id, fotoUri);
+        fotoUrl = url;
       } catch (e) {
-        console.error('[completarRecojo] Error leyendo foto como base64:', e);
-        log('ERROR', 'completarRecojo', `leerFotoBase64: ${e instanceof Error ? e.message : String(e)}`);
+        console.error('[completarRecojo] Error subiendo evidencia:', e);
+        log('ERROR', 'completarRecojo', `subirEvidencia: ${e instanceof Error ? e.message : String(e)}`);
       }
     }
 
-    // 2. Registrar cobro si hay pago real
     if (metodoPago && metodoPago !== 'SIN_PAGO' && monto) {
       try {
         await ticketsApi.registrarCobro(id, {
@@ -323,38 +284,28 @@ export default function TicketsScreen() {
       }
     }
 
-    // 3. Guardar registro
     if (sinInfo) {
-      // Guardar registro vacío con flag para que el admin sepa
       try {
-        await ticketsApi.guardarRegistro(id, {
-          sinInfo: true,
-        });
+        await ticketsApi.guardarRegistro(id, { sinInfo: true });
       } catch (e) {
         console.error('[completarRecojo] Error guardando registro vacío:', e);
         log('ERROR', 'completarRecojo', `guardarRegistro(sinInfo): ${e instanceof Error ? e.message : String(e)}`);
       }
-    } else if (refNombre || observaciones || registroBase64) {
+    } else if (refNombre || observaciones || fotoUrl) {
       try {
-        await ticketsApi.guardarRegistro(id, {
-          refNombre,
-          observaciones,
-          fotoBase64: registroBase64,
-        });
+        await ticketsApi.guardarRegistro(id, { refNombre, observaciones, fotoUrl });
       } catch (e) {
         console.error('[completarRecojo] Error guardando registro:', e);
         log('ERROR', 'completarRecojo', `guardarRegistro: ${e instanceof Error ? e.message : String(e)}`);
       }
     }
 
-    // 4. Cambiar estado a RECOGIDO — siempre ejecutar
     try {
       await ticketsApi.updateEstado(id, 'RECOGIDO');
       await cargarTickets();
-      // Mostrar mensaje de éxito según el caso
       if (sinInfo) {
         Alert.alert('✅ Recojo completado', 'El registro se guardó sin información adicional.');
-      } else if (registroBase64 || refNombre || observaciones || (metodoPago && metodoPago !== 'SIN_PAGO')) {
+      } else if (fotoUri || refNombre || observaciones || (metodoPago && metodoPago !== 'SIN_PAGO')) {
         Alert.alert('✅ Registro guardado', 'Los datos del recojo se guardaron correctamente.');
       } else {
         Alert.alert('✅ Recojo completado', 'El ticket se marcó como recogido.');
@@ -396,9 +347,6 @@ export default function TicketsScreen() {
 
   // Separar tickets por grupo
   const tf = config?.ticketFlow || {};
-  const CC = config?.dashboard?.colors || C;
-  const badgeLabels = config?.dashboard?.ticketBadgeLabels || {};
-  const statsLbls = config?.dashboard?.quickStatsLabels || {};
   const activos = tickets.filter(t => (tf[t.estado] || 'done') === 'active');
   const asignados = tickets.filter(t => (tf[t.estado] || 'done') === 'pending');
   const pendientes = tickets.filter(t => (tf[t.estado] || 'done') === 'pendiente');
@@ -406,143 +354,126 @@ export default function TicketsScreen() {
 
   const eActual = config?.estadosMoto?.[estadoMoto] || {};
 
-  // Labels para tickets completados según su estado real
-  const DONE_LABELS: Record<string, string> = {
-    RECOGIDO: '🟣 Recogido',
-    EN_LABORATORIO: '🧪 En laboratorio',
-    ENTREGADO: '✅ Entregado',
-    CERRADO: '✅ Cerrado',
-    CANCELADO: '❌ Cancelado',
-    FALLIDO: '❌ Fallido',
-  };
-
-  // Badge corto para cada estado en la tarjeta (uiStatus='done')
-  const BADGE_ESTADO_LABELS: Record<string, string> = {
-    RECOGIDO: 'RECOGIDO',
-    EN_LABORATORIO: 'EN LAB',
-    ENTREGADO: 'ENTREGADO',
-    CERRADO: 'CERRADO',
-    CANCELADO: 'CANCEL',
-    FALLIDO: 'FALLIDO',
-  };
-
   const renderTicket = ({ item }: { item: Ticket }) => {
     const tf2 = config?.ticketFlow || {};
     const uiStatus = tf2[item.estado] || 'done';
     const isDone = uiStatus === 'done';
-    // Labels y colores desde el config del VPS
-    const UI_LABELS: Record<string, string> = {
-      pendiente: '📋  Tomar pedido',
-      pending: '🏍️  Voy ahora',
-      active:  '🧪  Ya recogí la muestra',
+    const borderColor = uiStatus === 'pendiente' ? C.blue : uiStatus === 'pending' ? C.orange : uiStatus === 'active' ? C.blue : C.green;
+
+    // ─── Labels desde config (SDUI) ───
+    const badgeLabels: Record<string, string> = {
+      pendiente: UL.badgePendiente || '📋 PENDIENTE',
+      pending: UL.badgeAsignado || '🔄 ASIGNADO',
+      active: UL.badgeEnRuta || '🏍️ EN RUTA',
+      done: UL.badgeCompletado || '✅ RECOGIDO',
     };
-    const UI_COLORS: Record<string, string> = {
-      pendiente: CC.blue,
-      pending:   CC.orange,
-      active:    CC.blue,
+    const btnLabels: Record<string, string> = {
+      pendiente: UL.btnTomarPedido || '📋 Tomar pedido',
+      pending: UL.btnVoyAhora || '🏍️ Voy ahora',
+      active: UL.btnYaRecogi || '🧪 Ya recogí',
     };
-    const btnLabel = UI_LABELS[uiStatus];
-    const btnColor = UI_COLORS[uiStatus];
+    const btnColors: Record<string, string> = {
+      pendiente: C.blue,
+      pending: C.orange,
+      active: C.blue,
+    };
+    const btnLabel = btnLabels[uiStatus];
+    const btnColor = btnColors[uiStatus];
     const cargando = loadingId === item.id;
-    const borderColor = uiStatus === 'pendiente' ? CC.blue : uiStatus === 'pending' ? CC.orange : uiStatus === 'active' ? CC.blue : CC.green;
+
+    // ─── Design tokens (SDUI) ───
+    const fs = DT?.fontSizes || {};
+    const sp = DT?.spacing || {};
 
     return (
-      <View style={[s.tcard, { borderLeftColor: borderColor }, (uiStatus === 'active' || uiStatus === 'pendiente') && s.tcardActive]}>
+      <View style={[s.tcard, { borderLeftColor: borderColor, padding: sp.cardPadding || 13, borderRadius: (DT?.borderRadius?.card ?? 12) }, (uiStatus === 'active' || uiStatus === 'pendiente') && s.tcardActive]}>
         <View style={s.tcTop}>
-          <Text style={s.tcId}>#{item.id.slice(-6).toUpperCase()}</Text>
+          <Text style={[s.tcId, { fontSize: fs.micro || 9 }]}>#{item.id.slice(-6).toUpperCase()}</Text>
           <View style={[s.badge, {
-            backgroundColor: uiStatus === 'pendiente' ? CC.blueLight : uiStatus === 'pending' ? CC.orangeLight : uiStatus === 'active' ? CC.blueLight : CC.greenLight,
-            borderColor: uiStatus === 'pendiente' ? CC.blue || C.blueBorder : uiStatus === 'pending' ? CC.orange || '#fde8a0' : uiStatus === 'active' ? CC.blue || C.blueBorder : CC.greenLight || '#a8e6c4',
+            backgroundColor: uiStatus === 'pendiente' ? C.blueLight : uiStatus === 'pending' ? C.orangeLight : uiStatus === 'active' ? C.blueLight : C.greenLight,
+            borderColor: uiStatus === 'pendiente' ? C.blueBorder : uiStatus === 'pending' ? C.orange : uiStatus === 'active' ? C.blueBorder : C.green,
+            borderRadius: DT?.borderRadius?.badge ?? 6,
           }]}>
-            <Text style={[s.badgeTxt, { color: uiStatus === 'pendiente' ? CC.blue : uiStatus === 'pending' ? CC.orange : uiStatus === 'active' ? CC.blue : CC.green }]}>
-              {uiStatus === 'done' ? (BADGE_ESTADO_LABELS[item.estado] || 'COMPLETADO ✓') : (badgeLabels[uiStatus] || (uiStatus === 'pendiente' ? 'PENDIENTE' : uiStatus === 'pending' ? 'ASIGNADO' : 'EN CAMINO'))}
+            <Text style={[s.badgeTxt, { fontSize: fs.badge || 11, color: uiStatus === 'pendiente' ? C.blue : uiStatus === 'pending' ? C.orange : uiStatus === 'active' ? C.blue : C.green }]}>
+              {badgeLabels[uiStatus]}
             </Text>
           </View>
         </View>
 
-        {/* Nombre referencia */}
         {item.referencia?.nombre && (
-          <Text style={s.tcRef}>📍 {item.referencia.nombre}</Text>
+          <Text style={[s.tcRef, { fontSize: fs.caption || 12 }]}>📍 {item.referencia.nombre}</Text>
         )}
 
-        <Text style={s.tcType}>{item.tipoMuestra || item.referencia?.nombreComercial || item.referencia?.nombre || 'Muestra'}</Text>
-        <Text style={s.tcAddr}>{item.referencia?.direccion ?? ''}</Text>
+        <Text style={[s.tcType, { fontSize: fs.body || 14 }]}>{item.referencia?.nombre ?? 'Muestra'}</Text>
+        <Text style={[s.tcAddr, { fontSize: fs.small || 10 }]}>{item.referencia?.direccion ?? ''}</Text>
         {item.referencia?.telefono && (
-          <TouchableOpacity style={{ flexDirection:'row', alignItems:'center', gap:4, marginTop:2 }} onPress={() => Linking.openURL(`tel:${item.referencia?.telefono}`)}>
-            <Text style={s.tcPhone}>📞 {item.referencia.telefono}</Text>
-          </TouchableOpacity>
+          <Text style={[s.tcPhone, { fontSize: fs.micro || 9 }]}>📞 {item.referencia.telefono}</Text>
         )}
 
-        {item.horaLimite && !isDone && (
+        {(screen.showTimeLimit !== false) && item.horaLimite && !isDone && (
           <View style={[s.ttime, new Date(item.horaLimite) < new Date() && s.ttimeUrgent]}>
-            <Text style={[s.ttimeTxt, new Date(item.horaLimite) < new Date() && { color: C.red }]}>
+            <Text style={[s.ttimeTxt, new Date(item.horaLimite) < new Date() && { color: C.red }, { fontSize: fs.micro || 9 }]}>
               ⏰ Límite: {new Date(item.horaLimite).toLocaleTimeString('es-PE', { hour:'2-digit', minute:'2-digit' })}
             </Text>
           </View>
         )}
 
-        {item.notas && !isDone && (
-          <Text style={s.notas}>📝 {item.notas}</Text>
+        {(screen.showNotas !== false) && item.notas && !isDone && (
+          <Text style={[s.notas, { fontSize: fs.small || 10 }]}>📝 {item.notas}</Text>
         )}
 
         {!isDone && btnLabel && (
           <TouchableOpacity
-            style={[s.abtn, { backgroundColor: btnColor }, cargando && { opacity: 0.6 }]}
+            style={[s.abtn, { backgroundColor: btnColor, padding: sp.buttonPadding || 16, minHeight: DT?.layout?.buttonMinHeight ?? 48, borderRadius: DT?.borderRadius?.button ?? 8 }, cargando && { opacity: 0.6 }]}
             onPress={() => avanzarEstado(item)}
             disabled={cargando}
             activeOpacity={0.82}
           >
-            <Text style={s.abtnTxt}>{cargando ? 'Actualizando...' : btnLabel}</Text>
+            <Text style={[s.abtnTxt, { fontSize: fs.body || 14 }]}>{cargando ? (UL.btnCargando || 'Actualizando...') : btnLabel}</Text>
           </TouchableOpacity>
         )}
 
         {isDone && (
-          <View>
-            <Text style={[s.doneTag, { color: CC.green }]}>{DONE_LABELS[item.estado] || '✅ Completado'} · {item.horaLimite ? new Date(item.horaLimite).toLocaleTimeString('es-PE',{hour:'2-digit',minute:'2-digit'}) : ''}</Text>
-            {flowCache[item.id]?.boton && (
-              <TouchableOpacity
-                style={[s.abtn, { backgroundColor: flowCache[item.id].boton.color || CC.blue }, cargando && { opacity: 0.6 }]}
-                onPress={() => avanzarEstado(item)}
-                disabled={cargando}
-                activeOpacity={0.82}
-              >
-                <Text style={s.abtnTxt}>{cargando ? 'Actualizando...' : flowCache[item.id].boton.label}</Text>
-              </TouchableOpacity>
-            )}
-          </View>
+          <Text style={[s.doneTag, { fontSize: fs.small || 10 }]}>✅ {UL.doneTag || 'Completado'} · {new Date(item.updatedAt || item.createdAt).toLocaleTimeString('es-PE',{hour:'2-digit',minute:'2-digit'})}</Text>
         )}
       </View>
     );
   };
 
+  // ─── Secciones dinámicas desde SDUI ───
   const listaCompleta = [
-    ...(activos.length > 0 ? [{ _sep: '🔵 En camino', _color: CC.blue }] : []),
-    ...activos,
-    ...(pendientes.length > 0 ? [{ _sep: '📋 Pendientes', _color: CC.blue }] : []),
-    ...pendientes,
-    ...(asignados.length > 0 ? [{ _sep: '⏳ Asignados', _color: CC.orange }] : []),
-    ...asignados,
-    ...(completados.length > 0 ? [{ _sep: '✅ Completados', _color: CC.green }] : []),
-    ...completados,
+    ...((sections?.activos !== false && activos.length > 0) ? [{ _sep: UL.seccionEnCamino || '🔵 En camino', _color: C.blue }] : []),
+    ...(sections?.activos !== false ? activos : []),
+    ...((sections?.pendientes !== false && pendientes.length > 0) ? [{ _sep: UL.seccionPendientes || '📋 Pendientes', _color: C.blue }] : []),
+    ...(sections?.pendientes !== false ? pendientes : []),
+    ...((sections?.asignados !== false && asignados.length > 0) ? [{ _sep: UL.seccionAsignados || '⏳ Asignados', _color: C.orange }] : []),
+    ...(sections?.asignados !== false ? asignados : []),
+    ...((sections?.completados !== false && completados.length > 0) ? [{ _sep: UL.seccionCompletados || '✅ Recogidos', _color: C.green }] : []),
+    ...(sections?.completados !== false ? completados : []),
   ] as any[];
 
   return (
     <SafeAreaView style={s.root} edges={['top']}>
 
-      {/* HEADER */}
+      {/* ─── HEADER (controlable desde VPS) ─── */}
+      {(screen.showHeader !== false) && (
       <View style={s.header}>
         <View style={s.hTop}>
+          {(screen.showAvatar !== false) && (
           <View style={s.av}>
             <Text style={s.avTxt}>{user?.nombre?.[0]?.toUpperCase() ?? 'M'}</Text>
           </View>
+          )}
           <View style={{ flex: 1 }}>
             <Text style={s.hName}>{user?.nombre ?? 'Motorizado'}</Text>
+            {(screen.showGpsStatus !== false) && (
             <View style={s.gpsRow}>
               <View style={[s.gpsDot, { backgroundColor: eActual.gpsColor }]} />
-              <Text style={[s.gpsTxt, { color: eActual.gpsColor }]}>{eActual.gpsTxt}</Text>
+              <Text style={[s.gpsTxt, { color: eActual.gpsColor }]}>{eActual.gpsTxt || 'GPS activo'}</Text>
             </View>
+            )}
           </View>
-          {/* Pill de estado — toca para cambiar */}
+          {(screen.showEstadoPill !== false) && (
           <TouchableOpacity
             style={[s.estadoPill, { backgroundColor: eActual.bg, borderColor: eActual.border }]}
             onPress={() => { setEstadoSel(estadoMoto); setEstadoModal(true); }}
@@ -551,28 +482,32 @@ export default function TicketsScreen() {
             <Text style={s.estadoPillIc}>{eActual.ic}</Text>
             <Text style={[s.estadoPillTxt, { color: eActual.color }]}>{eActual.label}</Text>
           </TouchableOpacity>
+          )}
         </View>
 
-        {/* Stats */}
+        {/* Stats header (controlable desde VPS) */}
+        {(screen.showStats !== false) && (
         <View style={s.qsRow}>
           <View style={s.qs}>
-            <Text style={[s.qsVal, { color: CC.blue }]}>{pendientes.length}</Text>
-            <Text style={s.qsLbl}>{statsLbls.pendientes || 'Pendientes'}</Text>
+            <Text style={[s.qsVal, { color: C.blue }]}>{pendientes.length}</Text>
+            <Text style={s.qsLbl}>{UL.statsPendientes || 'Pendientes'}</Text>
           </View>
           <View style={s.qs}>
-            <Text style={[s.qsVal, { color: CC.orange }]}>{asignados.length}</Text>
-            <Text style={s.qsLbl}>{statsLbls.asignados || 'Asignados'}</Text>
+            <Text style={[s.qsVal, { color: C.orange }]}>{asignados.length}</Text>
+            <Text style={s.qsLbl}>{UL.statsAsignados || 'Asignados'}</Text>
           </View>
           <View style={s.qs}>
-            <Text style={[s.qsVal, { color: CC.blue }]}>{activos.length}</Text>
-            <Text style={s.qsLbl}>{statsLbls.enCamino || 'En camino'}</Text>
+            <Text style={[s.qsVal, { color: C.blue }]}>{activos.length}</Text>
+            <Text style={s.qsLbl}>{UL.statsEnCamino || 'En ruta'}</Text>
           </View>
           <View style={s.qs}>
-            <Text style={[s.qsVal, { color: CC.green }]}>{completados.length}</Text>
-            <Text style={s.qsLbl}>{statsLbls.listas || 'Listas'}</Text>
+            <Text style={[s.qsVal, { color: C.green }]}>{completados.length}</Text>
+            <Text style={s.qsLbl}>{UL.statsCompletados || 'Recogidos'}</Text>
           </View>
         </View>
+        )}
       </View>
+      )}
 
       {/* Banner de estado */}
       <View style={[s.banner, { backgroundColor: eActual.bg }]}>
@@ -586,7 +521,7 @@ export default function TicketsScreen() {
         keyExtractor={(item, i) => item._sep ? 'sep-' + i : item.id}
         renderItem={({ item }) =>
           item._sep
-            ? <Text style={[s.sep, { color: item._color }]}>{item._sep}</Text>
+            ? <Text style={[s.sep, { color: item._color, fontSize: DT?.fontSizes?.micro || 9 }]}>{item._sep}</Text>
             : renderTicket({ item })
         }
         contentContainerStyle={s.list}
@@ -594,11 +529,11 @@ export default function TicketsScreen() {
         ListEmptyComponent={
           <View style={s.empty}>
             <Text style={s.emptyIc}>📭</Text>
-            <Text style={s.emptyTxt}>Sin tickets asignados</Text>
-            <Text style={s.emptySub}>Jala hacia abajo para actualizar</Text>
+            <Text style={[s.emptyTxt, { fontSize: DT?.fontSizes?.body || 14 }]}>{UL.sinTickets || 'Sin tickets por ahora'}</Text>
+            <Text style={s.emptySub}>{config?.dashboard?.emptyListSubtitle || 'Tira hacia abajo para actualizar'}</Text>
           </View>
         }
-        ItemSeparatorComponent={() => <View style={{ height: 8 }} />}
+        ItemSeparatorComponent={() => <View style={{ height: DT?.spacing?.cardGap || 10 }} />}
       />
 
       {/* ══ MODAL ESTADO MOTO ══ */}
@@ -606,8 +541,8 @@ export default function TicketsScreen() {
         <View style={s.overlay}>
           <View style={s.sheet}>
             <View style={s.handle} />
-            <Text style={s.sheetTitle}>¿Cuál es tu estado?</Text>
-            <Text style={s.sheetSub}>La administradora verá esto en tiempo real</Text>
+            <Text style={[s.sheetTitle, { fontSize: DT?.fontSizes?.title || 16 }]}>{config?.dashboard?.estadoModalTitle || '¿Cuál es tu estado?'}</Text>
+            <Text style={[s.sheetSub, { fontSize: DT?.fontSizes?.caption || 12 }]}>{config?.dashboard?.estadoModalSubtitle || 'La administradora lo ve en tiempo real'}</Text>
 
             {Object.keys(config?.estadosMoto || {}).map(key => {
               const e = config?.estadosMoto?.[key] || {};
@@ -619,71 +554,67 @@ export default function TicketsScreen() {
                   onPress={() => setEstadoSel(key)}
                   activeOpacity={0.82}
                 >
-                  <Text style={s.eOptIc}>{e.ic}</Text>
+                  <Text style={[s.eOptIc, { fontSize: DT?.fontSizes?.title || 16 }]}>{e.ic}</Text>
                   <View style={{ flex: 1 }}>
-                    <Text style={s.eOptName}>{e.label || key}</Text>
-                    <Text style={s.eOptDesc}>
-                      {key === 'DISPONIBLE' ? 'En turno, listo para recojos' : key === 'OCUPADO' ? 'En pausa · vuelvo en unos minutos' : key === 'OFF_LINE' ? 'Terminé mi jornada del día' : ''}
-                    </Text>
+                    <Text style={[s.eOptName, { fontSize: DT?.fontSizes?.body || 14 }]}>{e.label || key}</Text>
+                    <Text style={[s.eOptDesc, { fontSize: DT?.fontSizes?.small || 10 }]}>{e.desc || ''}</Text>
                   </View>
                   <View style={[s.eCheck, isSel && { backgroundColor: e.color, borderColor: e.color }]}>
-                    {isSel && <Text style={{ color: C.white, fontSize: 10, fontWeight: '800' }}>✓</Text>}
+                    {isSel && <Text style={{ color: C.white, fontSize: DT?.fontSizes?.caption || 12, fontWeight: '800' }}>✓</Text>}
                   </View>
                 </TouchableOpacity>
               );
             })}
 
             <TouchableOpacity style={[s.confirmBtn, { backgroundColor: C.blue }]} onPress={confirmarEstadoMoto}>
-              <Text style={s.confirmBtnTxt}>Confirmar estado</Text>
+              <Text style={s.confirmBtnTxt}>{config?.dashboard?.confirmarEstado || 'Confirmar'}</Text>
             </TouchableOpacity>
             <TouchableOpacity style={s.cancelBtn} onPress={() => setEstadoModal(false)}>
-              <Text style={s.cancelBtnTxt}>Cancelar</Text>
+              <Text style={s.cancelBtnTxt}>{config?.dashboard?.cancelar || 'Cancelar'}</Text>
             </TouchableOpacity>
           </View>
         </View>
       </Modal>
 
       {/* ══ MODAL REGISTRO DE RECOJO ══ */}
+      {(screen.showRegistroModal !== false) && (
       <Modal visible={registroModal} transparent animationType="slide">
         <View style={s.overlay}>
           <View style={[s.sheet, { maxHeight: '90%' }]}>
             <ScrollView showsVerticalScrollIndicator={false}>
               <View style={s.handle} />
-              <Text style={s.sheetTitle}>Registrar recojo</Text>
-              <Text style={s.sheetSub}>Opcional — completa lo que aplique</Text>
+              <Text style={[s.sheetTitle, { fontSize: DT?.fontSizes?.title || 16 }]}>Registrar recojo</Text>
+              <Text style={[s.sheetSub, { fontSize: DT?.fontSizes?.caption || 12 }]}>Opcional — completa lo que aplique</Text>
 
-              {/* Nombre referencia */}
-              <Text style={s.msec}>Nombre de referencia</Text>
+              <Text style={[s.msec, { fontSize: DT?.fontSizes?.micro || 9 }]}>Nombre de referencia</Text>
               <TextInput
                 style={s.minp}
                 value={refNombre}
                 onChangeText={setRefNombre}
-                placeholder="Ej. María López"
+                placeholder={config?.dashboard?.registroPlaceholders?.paciente || 'Ej. María López'}
                 placeholderTextColor={C.grayBorder}
               />
 
-              {/* Foto */}
-              <Text style={s.msec}>Foto de evidencia <Text style={s.optional}>(opcional)</Text></Text>
+              <Text style={[s.msec, { fontSize: DT?.fontSizes?.micro || 9 }]}>Foto de evidencia <Text style={s.optional}>(opcional)</Text></Text>
               {!fotoUri ? (
                 <TouchableOpacity style={s.fotoBtn} onPress={tomarFoto}>
-                  <Text style={s.fotoBtnLbl}>📷 Tomar foto</Text>
-                  <Text style={s.fotoBtnSub}>Toca para abrir la cámara</Text>
+                  <Text style={[s.fotoBtnLbl, { fontSize: DT?.fontSizes?.caption || 12 }]}>📷 Tomar foto</Text>
+                  <Text style={[s.fotoBtnSub, { fontSize: DT?.fontSizes?.small || 10 }]}>Toca para abrir la cámara</Text>
                 </TouchableOpacity>
               ) : (
                 <View style={s.fotoPreview}>
-                  <Text style={{ fontSize: 22 }}>🖼️</Text>
+                  <Text style={{ fontSize: DT?.fontSizes?.title || 16 }}>🖼️</Text>
                   <View style={{ flex: 1 }}>
-                    <Text style={s.fotoName}>evidencia_foto.jpg</Text>
-                    <Text style={{ fontSize: 10, color: C.gray }}>Lista para subir</Text>
+                    <Text style={[s.fotoName, { fontSize: DT?.fontSizes?.caption || 12 }]}>evidencia_foto.jpg</Text>
+                    <Text style={{ fontSize: DT?.fontSizes?.small || 10, color: C.gray }}>Lista para subir</Text>
                   </View>
                   <TouchableOpacity onPress={() => setFotoUri(null)}>
-                    <Text style={{ fontSize: 11, color: C.red, fontWeight: '700' }}>Quitar</Text>
+                    <Text style={{ fontSize: DT?.fontSizes?.caption || 12, color: C.red, fontWeight: '700' }}>Quitar</Text>
                   </TouchableOpacity>
                 </View>
               )}
 
-              {/* Observaciones */}
-              <Text style={s.msec}>Observaciones <Text style={s.optional}>(opcional)</Text></Text>
+              <Text style={[s.msec, { fontSize: DT?.fontSizes?.micro || 9 }]}>Observaciones <Text style={s.optional}>(opcional)</Text></Text>
               <TextInput
                 style={[s.minp, { height: 72, textAlignVertical: 'top' }]}
                 value={observaciones}
@@ -693,33 +624,31 @@ export default function TicketsScreen() {
                 multiline
               />
 
-              {/* Pago */}
-              <Text style={s.msec}>Pago recibido <Text style={s.optional}>(opcional)</Text></Text>
+              <Text style={[s.msec, { fontSize: DT?.fontSizes?.micro || 9 }]}>Pago recibido <Text style={s.optional}>(opcional)</Text></Text>
               <View style={s.pagoGrid}>
-                {([
+                {(config?.opcionesPago || [
                   { key: 'EFECTIVO', ic: '💵', lbl: 'Efectivo' },
                   { key: 'YAPE', ic: '📱', lbl: 'Yape' },
                   { key: 'TRANSFERENCIA', ic: '🏦', lbl: 'Transferencia' },
                   { key: 'SIN_PAGO', ic: '🚫', lbl: 'Sin pago' },
-                ] as { key: MetodoPago; ic: string; lbl: string }[]).map(p => (
+                ]).map((p: any) => (
                   <TouchableOpacity
                     key={p.key}
                     style={[s.pagoOpt, metodoPago === p.key && { backgroundColor: C.blueLight, borderColor: C.blue }]}
                     onPress={() => setMetodoPago(p.key)}
                     activeOpacity={0.82}
                   >
-                    <Text style={{ fontSize: 22, marginBottom: 3 }}>{p.ic}</Text>
-                    <Text style={[s.pagoLbl, metodoPago === p.key && { color: C.blue }]}>{p.lbl}</Text>
+                    <Text style={{ fontSize: DT?.fontSizes?.title || 16, marginBottom: 3 }}>{p.ic}</Text>
+                    <Text style={[s.pagoLbl, metodoPago === p.key && { color: C.blue }, { fontSize: DT?.fontSizes?.small || 10 }]}>{p.lbl}</Text>
                   </TouchableOpacity>
                 ))}
               </View>
 
-              {/* Monto */}
               {metodoPago && metodoPago !== 'SIN_PAGO' && (
                 <View>
-                  <Text style={s.msec}>Monto recibido</Text>
+                  <Text style={[s.msec, { fontSize: DT?.fontSizes?.micro || 9 }]}>Monto recibido</Text>
                   <View style={s.montoRow}>
-                    <View style={s.montoPre}><Text style={s.montoPreTxt}>S/</Text></View>
+                    <View style={s.montoPre}><Text style={[s.montoPreTxt, { fontSize: DT?.fontSizes?.body || 14 }]}>S/</Text></View>
                     <TextInput
                       style={s.montoInp}
                       value={monto}
@@ -734,7 +663,7 @@ export default function TicketsScreen() {
 
               <View style={s.mActions}>
                 <TouchableOpacity style={s.mCancel} onPress={() => setRegistroModal(false)}>
-                  <Text style={s.mCancelTxt}>Cancelar</Text>
+                  <Text style={[s.mCancelTxt, { fontSize: DT?.fontSizes?.caption || 12 }]}>Cancelar</Text>
                 </TouchableOpacity>
                 <TouchableOpacity
                   style={[s.mConfirm, { backgroundColor: C.blue }, subiendo && { opacity: 0.6 }]}
@@ -743,7 +672,7 @@ export default function TicketsScreen() {
                 >
                   {subiendo
                     ? <ActivityIndicator color={C.white} />
-                    : <Text style={s.mConfirmTxt}>Confirmar recojo ✓</Text>
+                    : <Text style={[s.mConfirmTxt, { fontSize: DT?.fontSizes?.caption || 12 }]}>Confirmar recojo ✓</Text>
                   }
                 </TouchableOpacity>
               </View>
@@ -751,35 +680,40 @@ export default function TicketsScreen() {
           </View>
         </View>
       </Modal>
+      )}
 
-      {/* ══ ALERT CONFIRMACIÓN SIN EVENTUALIDADES ══ */}
+      {/* ══ ALERT CONFIRMACIÓN ══ */}
+      {(screen.showConfirmModal !== false) && (
       <Modal visible={confirmModal} transparent animationType="fade">
         <View style={[s.overlay, { alignItems: 'center', justifyContent: 'center' }]}>
           <View style={s.alertBox}>
             <Text style={s.alertIc}>📋</Text>
-            <Text style={s.alertTitle}>¿Deseas continuar sin registrar información?</Text>
-            <Text style={s.alertBody}>
+            <Text style={[s.alertTitle, { fontSize: DT?.fontSizes?.title || 16 }]}>¿Deseas continuar sin registrar información?</Text>
+            <Text style={[s.alertBody, { fontSize: DT?.fontSizes?.caption || 12 }]}>
               Si tienes foto, nombre o notas que agregar, puedes volver al formulario y completarlos.
             </Text>
             <TouchableOpacity style={[s.confirmBtn, { backgroundColor: C.blue, marginTop: 16 }]} onPress={confirmarSinEventualidades}>
               <Text style={s.confirmBtnTxt}>Sí, confirmar recojo</Text>
             </TouchableOpacity>
             <TouchableOpacity style={[s.cancelBtn, { marginTop: 8 }]} onPress={volverAlFormulario}>
-              <Text style={[s.cancelBtnTxt, { color: C.text }]}>No, volver a registrar</Text>
+              <Text style={[s.cancelBtnTxt, { color: C.text, fontSize: DT?.fontSizes?.body || 14 }]}>No, volver a registrar</Text>
             </TouchableOpacity>
           </View>
         </View>
       </Modal>
+      )}
 
     </SafeAreaView>
   );
 }
 
+// ─── Styles estáticos (estructura) ───
+// Los valores dinámicos (fontSize, padding, borderRadius) se pasan inline desde SDUI
 const s = StyleSheet.create({
-  root: { flex:1, backgroundColor:'#F5F6F8' },
-  header: { backgroundColor:'#FFFFFF', padding:14, borderBottomWidth:1, borderBottomColor:'#E8E8E8' },
+  root: { flex:1, backgroundColor:'#F2F3F4' },
+  header: { backgroundColor:'#FFFFFF', padding:14, borderBottomWidth:1, borderBottomColor:'#D5D8DC' },
   hTop: { flexDirection:'row', alignItems:'center', gap:10, marginBottom:12 },
-  av: { width:40, height:40, borderRadius:11, backgroundColor:'#4BBFE0', alignItems:'center', justifyContent:'center' },
+  av: { width:40, height:40, borderRadius:11, backgroundColor:'#3498DB', alignItems:'center', justifyContent:'center' },
   avTxt: { fontSize:17, fontWeight:'800', color:'#fff' },
   hName: { fontSize:14, fontWeight:'700', color:'#1a1a2e' },
   gpsRow: { flexDirection:'row', alignItems:'center', gap:4, marginTop:2 },
@@ -789,71 +723,71 @@ const s = StyleSheet.create({
   estadoPillIc: { fontSize:13 },
   estadoPillTxt: { fontSize:10, fontWeight:'800' },
   qsRow: { flexDirection:'row', gap:8 },
-  qs: { flex:1, backgroundColor:'#F5F6F8', borderRadius:9, padding:8, alignItems:'center' },
+  qs: { flex:1, backgroundColor:'#F2F3F4', borderRadius:9, padding:8, alignItems:'center' },
   qsVal: { fontSize:18, fontWeight:'800' },
-  qsLbl: { fontSize:8, fontWeight:'600', color:'#8C8C8C', textTransform:'uppercase', letterSpacing:0.5, marginTop:1 },
-  banner: { flexDirection:'row', alignItems:'center', gap:6, paddingHorizontal:14, paddingVertical:8, borderBottomWidth:1, borderBottomColor:'#E8E8E8' },
+  qsLbl: { fontSize:8, fontWeight:'600', color:'#7F8C8D', textTransform:'uppercase', letterSpacing:0.5, marginTop:1 },
+  banner: { flexDirection:'row', alignItems:'center', gap:6, paddingHorizontal:14, paddingVertical:8, borderBottomWidth:1, borderBottomColor:'#D5D8DC' },
   bannerIc: { fontSize:13 },
   bannerTxt: { fontSize:10, fontWeight:'700' },
   list: { padding:12, paddingBottom:32 },
   sep: { fontSize:9, fontWeight:'800', letterSpacing:1, textTransform:'uppercase', paddingVertical:6, paddingHorizontal:2 },
-  tcard: { backgroundColor:'#fff', borderRadius:14, padding:13, borderLeftWidth:4 },
+  tcard: { backgroundColor:'#fff', borderLeftWidth:4 },
   tcardActive: { backgroundColor:'#f0fafd' },
   tcTop: { flexDirection:'row', justifyContent:'space-between', alignItems:'center', marginBottom:8 },
-  tcId: { fontSize:9, color:'#8C8C8C', letterSpacing:0.5, fontFamily:'monospace' },
-  badge: { paddingHorizontal:8, paddingVertical:3, borderRadius:20, borderWidth:1 },
-  badgeTxt: { fontSize:8, fontWeight:'800', letterSpacing:0.4 },
-  tcRef: { fontSize:10, fontWeight:'700', color:'#4BBFE0', marginBottom:2 },
-  tcType: { fontSize:13, fontWeight:'800', color:'#1a1a2e', marginBottom:3 },
-  tcAddr: { fontSize:10, color:'#6b7280', lineHeight:16 },
-  tcPhone: { fontSize:9, color:'#8C8C8C', marginTop:2 },
-  ttime: { alignSelf:'flex-start', backgroundColor:'#FEF9EC', borderRadius:20, paddingHorizontal:9, paddingVertical:3, marginVertical:6 },
-  ttimeUrgent: { backgroundColor:'#FEF0EF' },
-  ttimeTxt: { fontSize:9, fontWeight:'700', color:'#F39C12' },
-  notas: { fontSize:10, color:'#8C8C8C', fontStyle:'italic', marginBottom:6 },
-  abtn: { borderRadius:10, padding:12, alignItems:'center', marginTop:8 },
-  abtnTxt: { fontSize:12, fontWeight:'800', color:'#fff', letterSpacing:0.2 },
-  doneTag: { fontSize:10, fontWeight:'700', color:'#2ECC71', marginTop:8 },
+  tcId: { color:'#7F8C8D', letterSpacing:0.5, fontFamily:'monospace' },
+  badge: { paddingHorizontal:8, paddingVertical:3, borderWidth:1 },
+  badgeTxt: { fontWeight:'800', letterSpacing:0.4 },
+  tcRef: { fontWeight:'700', color:'#3498DB', marginBottom:2 },
+  tcType: { fontWeight:'800', color:'#1a1a2e', marginBottom:3 },
+  tcAddr: { color:'#7F8C8D', lineHeight:16 },
+  tcPhone: { color:'#7F8C8D', marginTop:2 },
+  ttime: { alignSelf:'flex-start', backgroundColor:'#FDF2E9', borderRadius:20, paddingHorizontal:9, paddingVertical:3, marginVertical:6 },
+  ttimeUrgent: { backgroundColor:'#FDEDEC' },
+  ttimeTxt: { fontWeight:'700', color:'#E67E22' },
+  notas: { color:'#7F8C8D', fontStyle:'italic', marginBottom:6 },
+  abtn: { alignItems:'center', marginTop:8 },
+  abtnTxt: { fontWeight:'800', color:'#fff', letterSpacing:0.2 },
+  doneTag: { fontWeight:'700', color:'#27AE60', marginTop:8 },
   empty: { alignItems:'center', paddingTop:60 },
   emptyIc: { fontSize:48, marginBottom:12 },
-  emptyTxt: { fontSize:15, color:'#8C8C8C', fontWeight:'700' },
-  emptySub: { fontSize:11, color:'#ccc', marginTop:4 },
+  emptyTxt: { color:'#7F8C8D', fontWeight:'700' },
+  emptySub: { fontSize:11, color:'#BDC3C7', marginTop:4 },
   overlay: { flex:1, backgroundColor:'rgba(0,0,0,0.5)', justifyContent:'flex-end' },
   sheet: { backgroundColor:'#fff', borderTopLeftRadius:20, borderTopRightRadius:20, padding:18, paddingBottom:32 },
-  handle: { width:36, height:3, backgroundColor:'#E8E8E8', borderRadius:2, alignSelf:'center', marginBottom:14 },
-  sheetTitle: { fontSize:16, fontWeight:'800', color:'#1a1a2e', marginBottom:3 },
-  sheetSub: { fontSize:11, color:'#8C8C8C', marginBottom:16 },
-  msec: { fontSize:9, fontWeight:'700', color:'#8C8C8C', textTransform:'uppercase', letterSpacing:0.8, marginTop:12, marginBottom:6 },
-  optional: { color:'#ccc', fontWeight:'400' },
-  minp: { backgroundColor:'#F5F6F8', borderWidth:1.5, borderColor:'#E8E8E8', borderRadius:9, padding:10, fontSize:12, color:'#1a1a2e' },
-  fotoBtn: { backgroundColor:'#F5F6F8', borderWidth:1.5, borderColor:'#E8E8E8', borderStyle:'dashed', borderRadius:10, padding:20, alignItems:'center' },
-  fotoBtnLbl: { fontSize:12, fontWeight:'700', color:'#8C8C8C' },
-  fotoBtnSub: { fontSize:9, color:'#ccc', marginTop:2 },
-  fotoPreview: { backgroundColor:'#EBF7FC', borderWidth:1.5, borderColor:'#c8ebf7', borderRadius:10, padding:10, flexDirection:'row', alignItems:'center', gap:10 },
-  fotoName: { fontSize:11, fontWeight:'700', color:'#4BBFE0' },
+  handle: { width:36, height:3, backgroundColor:'#D5D8DC', borderRadius:2, alignSelf:'center', marginBottom:14 },
+  sheetTitle: { fontWeight:'800', color:'#1a1a2e', marginBottom:3 },
+  sheetSub: { color:'#7F8C8D', marginBottom:16 },
+  msec: { fontWeight:'700', color:'#7F8C8D', textTransform:'uppercase', letterSpacing:0.8, marginTop:12, marginBottom:6 },
+  optional: { color:'#BDC3C7', fontWeight:'400' },
+  minp: { backgroundColor:'#F2F3F4', borderWidth:1.5, borderColor:'#D5D8DC', borderRadius:9, padding:10, fontSize:12, color:'#1a1a2e' },
+  fotoBtn: { backgroundColor:'#F2F3F4', borderWidth:1.5, borderColor:'#D5D8DC', borderStyle:'dashed', borderRadius:10, padding:20, alignItems:'center' },
+  fotoBtnLbl: { fontWeight:'700', color:'#7F8C8D' },
+  fotoBtnSub: { color:'#BDC3C7', marginTop:2 },
+  fotoPreview: { backgroundColor:'#EBF5FB', borderWidth:1.5, borderColor:'#AED6F1', borderRadius:10, padding:10, flexDirection:'row', alignItems:'center', gap:10 },
+  fotoName: { fontWeight:'700', color:'#3498DB' },
   pagoGrid: { flexDirection:'row', flexWrap:'wrap', gap:8 },
-  pagoOpt: { width:'47%', backgroundColor:'#F5F6F8', borderWidth:1.5, borderColor:'#E8E8E8', borderRadius:10, padding:12, alignItems:'center' },
-  pagoLbl: { fontSize:10, fontWeight:'700', color:'#6b7280' },
-  montoRow: { flexDirection:'row', alignItems:'center', backgroundColor:'#F5F6F8', borderWidth:1.5, borderColor:'#E8E8E8', borderRadius:9, overflow:'hidden' },
-  montoPre: { padding:10, backgroundColor:'#E8E8E8' },
-  montoPreTxt: { fontSize:14, fontWeight:'800', color:'#8C8C8C' },
+  pagoOpt: { width:'47%', backgroundColor:'#F2F3F4', borderWidth:1.5, borderColor:'#D5D8DC', borderRadius:10, padding:12, alignItems:'center' },
+  pagoLbl: { fontWeight:'700', color:'#7F8C8D' },
+  montoRow: { flexDirection:'row', alignItems:'center', backgroundColor:'#F2F3F4', borderWidth:1.5, borderColor:'#D5D8DC', borderRadius:9, overflow:'hidden' },
+  montoPre: { padding:10, backgroundColor:'#D5D8DC' },
+  montoPreTxt: { fontWeight:'800', color:'#7F8C8D' },
   montoInp: { flex:1, padding:10, fontSize:16, fontWeight:'800', color:'#1a1a2e' },
   mActions: { flexDirection:'row', gap:8, marginTop:16 },
-  mCancel: { flex:1, padding:12, borderRadius:10, borderWidth:1.5, borderColor:'#E8E8E8', alignItems:'center' },
-  mCancelTxt: { fontSize:12, fontWeight:'700', color:'#8C8C8C' },
+  mCancel: { flex:1, padding:12, borderRadius:10, borderWidth:1.5, borderColor:'#D5D8DC', alignItems:'center' },
+  mCancelTxt: { fontWeight:'700', color:'#7F8C8D' },
   mConfirm: { flex:2, padding:12, borderRadius:10, alignItems:'center' },
-  mConfirmTxt: { fontSize:12, fontWeight:'800', color:'#fff' },
-  eOpt: { flexDirection:'row', alignItems:'center', gap:12, padding:13, borderRadius:12, borderWidth:1.5, borderColor:'#E8E8E8', marginBottom:8 },
-  eOptIc: { fontSize:24, width:32, textAlign:'center' },
-  eOptName: { fontSize:13, fontWeight:'800', color:'#1a1a2e' },
-  eOptDesc: { fontSize:10, color:'#8C8C8C', marginTop:1 },
-  eCheck: { width:20, height:20, borderRadius:10, borderWidth:2, borderColor:'#E8E8E8', alignItems:'center', justifyContent:'center' },
+  mConfirmTxt: { fontWeight:'800', color:'#fff' },
+  eOpt: { flexDirection:'row', alignItems:'center', gap:12, padding:13, borderRadius:12, borderWidth:1.5, borderColor:'#D5D8DC', marginBottom:8 },
+  eOptIc: { width:32, textAlign:'center' },
+  eOptName: { fontWeight:'800', color:'#1a1a2e' },
+  eOptDesc: { color:'#7F8C8D', marginTop:1 },
+  eCheck: { width:20, height:20, borderRadius:10, borderWidth:2, borderColor:'#D5D8DC', alignItems:'center', justifyContent:'center' },
   confirmBtn: { borderRadius:12, padding:14, alignItems:'center', marginTop:8 },
   confirmBtnTxt: { fontSize:14, fontWeight:'800', color:'#fff' },
   cancelBtn: { padding:12, alignItems:'center' },
-  cancelBtnTxt: { fontSize:13, fontWeight:'700', color:'#8C8C8C' },
+  cancelBtnTxt: { fontSize:13, fontWeight:'700', color:'#7F8C8D' },
   alertBox: { backgroundColor:'#fff', borderRadius:18, padding:24, margin:24, alignItems:'center' },
   alertIc: { fontSize:40, marginBottom:8 },
-  alertTitle: { fontSize:16, fontWeight:'800', color:'#1a1a2e', textAlign:'center', lineHeight:22, marginBottom:8 },
-  alertBody: { fontSize:12, color:'#6b7280', textAlign:'center', lineHeight:18 },
+  alertTitle: { fontWeight:'800', color:'#1a1a2e', textAlign:'center', lineHeight:22, marginBottom:8 },
+  alertBody: { color:'#7F8C8D', textAlign:'center', lineHeight:18 },
 });

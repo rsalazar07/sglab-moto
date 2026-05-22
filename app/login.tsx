@@ -1,58 +1,118 @@
 import { useState, useEffect } from 'react';
-import { View, Text, TextInput, TouchableOpacity, Alert, ActivityIndicator, KeyboardAvoidingView, Platform } from 'react-native';
-import { router } from 'expo-router';
-import { authApi } from '../src/api/auth';
+import { View, Text, TextInput, TouchableOpacity, Alert, ActivityIndicator } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
+import { router, useSegments } from 'expo-router';
 import { useAuthStore } from '../src/store/authStore';
+import { authApi } from '../src/api/auth';
 import { api } from '../src/api/client';
 
-export default function LoginScreen() {
-  const [email, setEmail] = useState('');
-  const [password, setPassword] = useState('');
-  const [loading, setLoading] = useState(false);
-  const [d, setD] = useState<any>({});
-  const { setUser } = useAuthStore();
+const COLORS_DARK = {
+  bg: '#0a0a0a', title: '#fff', subtitle: '#aaa',
+  inputBg: '#1a1a1a', inputBorder: '#444', inputPlaceholder: '#999',
+  btnColor: '#00d4ff', btnText: '#fff', error: '#E74C3C',
+};
 
+export default function LoginScreen() {
+  const setUser = useAuthStore((s) => s.setUser);
+  const [email, setEmail] = useState('');
+  const [pass, setPass] = useState('');
+  const [loading, setLoading] = useState(false);
+  const [colors, setColors] = useState(COLORS_DARK);
+  const [loginText, setLoginText] = useState({ title: 'SGLab Moto', subtitle: 'Plataforma de recolección de muestras', btn: 'Ingresar', errorMsg: 'Credenciales inválidas' });
+
+  // Cargar config visual del VPS (SDUI)
   useEffect(() => {
     api.get('/motorizados/config')
-      .then(r => setD(r.data?.dashboard || {}))
+      .then(r => {
+        const dash = r.data?.dashboard;
+        if (dash) {
+          setColors({
+            bg: dash.loginBg || COLORS_DARK.bg,
+            title: dash.loginTitleColor || COLORS_DARK.title,
+            subtitle: dash.loginSubtitleColor || COLORS_DARK.subtitle,
+            inputBg: dash.loginInputBg || COLORS_DARK.inputBg,
+            inputBorder: dash.loginInputBorder || COLORS_DARK.inputBorder,
+            inputPlaceholder: dash.loginInputPlaceholder || COLORS_DARK.inputPlaceholder,
+            btnColor: dash.loginBtnColor || COLORS_DARK.btnColor,
+            btnText: dash.loginBtnTextColor || COLORS_DARK.btnText,
+            error: '#E74C3C',
+          });
+          setLoginText({
+            title: dash.loginTitle || 'SGLab Moto',
+            subtitle: dash.loginSubtitle || 'Plataforma de recolección de muestras',
+            btn: dash.loginBtnText || 'Ingresar',
+            errorMsg: dash.loginErrorMsg || 'Credenciales inválidas',
+          });
+        }
+      })
       .catch(() => {});
   }, []);
 
-  const handleLogin = async () => {
-    if (!email.trim() || !password.trim()) {
-      Alert.alert('Error', 'Ingresa tu correo y contraseña');
-      return;
+  const login = async () => {
+    if (!email.trim() || !pass.trim()) {
+      return Alert.alert('Error', 'Ingresa tu correo y contraseña');
     }
     setLoading(true);
     try {
-      const res = await authApi.login(email.trim(), password);
-      setUser(res.user);
+      const res = await authApi.login(email.trim(), pass);
+      setUser(res.user, res.token);
       router.replace('/(app)/tickets');
     } catch (e: any) {
-      Alert.alert('Error', e?.response?.data?.message || 'Credenciales inválidas');
+      const msg = e.response?.data?.message || loginText.errorMsg;
+      Alert.alert('Error', Array.isArray(msg) ? msg[0] : msg);
     } finally {
       setLoading(false);
     }
   };
 
   return (
-    <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} style={{ flex: 1, backgroundColor: d.loginBg || '#0a0a0a', justifyContent: 'center', padding: 24 }}>
-      <View style={{ marginBottom: 40, alignItems: 'center' }}>
-        <Text style={{ fontSize: 40, marginBottom: 8 }}>{d.loginLogo || '🏍️'}</Text>
-        <Text style={{ fontSize: 28, fontWeight: 'bold', color: d.loginTitleColor || '#fff' }}>{d.loginTitle || 'SGLab Moto'}</Text>
-        <Text style={{ color: d.loginSubtitleColor || '#666', marginTop: 4 }}>{d.loginSubtitle || 'Plataforma de recolección'}</Text>
+    <SafeAreaView style={{ flex:1, backgroundColor: colors.bg, justifyContent:'center', padding:28 }}>
+      <View style={{ alignItems:'center', marginBottom:32 }}>
+        <Text style={{ fontSize:44, marginBottom:12 }}>🏍️</Text>
+        <Text style={{ fontSize:22, fontWeight:'800', color: colors.title, marginBottom:4 }}>{loginText.title}</Text>
+        <Text style={{ fontSize:13, color: colors.subtitle }}>{loginText.subtitle}</Text>
       </View>
 
-      <TextInput placeholder={d.emailPlaceholder || 'Correo electrónico'} placeholderTextColor={d.loginInputPlaceholder || '#555'} value={email} onChangeText={setEmail} autoCapitalize="none" keyboardType="email-address"
-        style={{ backgroundColor: d.loginInputBg || '#1a1a1a', color: d.loginTitleColor || '#fff', borderRadius: 12, padding: 16, fontSize: 16, marginBottom: 12, borderWidth: 1, borderColor: d.loginInputBorder || '#333' }} />
+      <TextInput
+        style={{
+          backgroundColor: colors.inputBg, borderWidth:1.5, borderColor: colors.inputBorder,
+          borderRadius:10, padding:16, fontSize:15, color: colors.title, marginBottom:12,
+        }}
+        value={email}
+        onChangeText={setEmail}
+        placeholder="Correo electrónico"
+        placeholderTextColor={colors.inputPlaceholder}
+        autoCapitalize="none"
+        keyboardType="email-address"
+        autoCorrect={false}
+      />
+      <TextInput
+        style={{
+          backgroundColor: colors.inputBg, borderWidth:1.5, borderColor: colors.inputBorder,
+          borderRadius:10, padding:16, fontSize:15, color: colors.title, marginBottom:20,
+        }}
+        value={pass}
+        onChangeText={setPass}
+        placeholder="Contraseña"
+        placeholderTextColor={colors.inputPlaceholder}
+        secureTextEntry
+      />
 
-      <TextInput placeholder={d.passwordPlaceholder || 'Contraseña'} placeholderTextColor={d.loginInputPlaceholder || '#555'} value={password} onChangeText={setPassword} secureTextEntry
-        style={{ backgroundColor: d.loginInputBg || '#1a1a1a', color: d.loginTitleColor || '#fff', borderRadius: 12, padding: 16, fontSize: 16, marginBottom: 24, borderWidth: 1, borderColor: d.loginInputBorder || '#333' }} />
-
-      <TouchableOpacity onPress={handleLogin} disabled={loading}
-        style={{ backgroundColor: d.loginBtnColor || '#00d4ff', borderRadius: 12, padding: 16, alignItems: 'center', opacity: loading ? 0.7 : 1 }}>
-        {loading ? <ActivityIndicator color={d.loginBtnTextColor || '#000'} /> : <Text style={{ fontSize: 16, fontWeight: 'bold', color: d.loginBtnTextColor || '#000' }}>{d.loginBtnText || 'Iniciar sesión'}</Text>}
+      <TouchableOpacity
+        style={{
+          backgroundColor: colors.btnColor, borderRadius:12, padding:16, alignItems:'center',
+          opacity: loading ? 0.6 : 1, minHeight: 52, justifyContent:'center',
+        }}
+        onPress={login}
+        disabled={loading}
+        activeOpacity={0.85}
+      >
+        {loading ? (
+          <ActivityIndicator color={colors.btnText} />
+        ) : (
+          <Text style={{ fontSize:16, fontWeight:'800', color: colors.btnText }}>{loginText.btn}</Text>
+        )}
       </TouchableOpacity>
-    </KeyboardAvoidingView>
+    </SafeAreaView>
   );
 }
