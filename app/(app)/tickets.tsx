@@ -384,16 +384,20 @@ export default function TicketsScreen() {
       pending: C.orange,
       active: C.blue,
     };
-    const btnLabel = btnLabels[uiStatus];
-    const btnColor = btnColors[uiStatus];
+    // ─── Botón dinámico desde VPS (SDUI) ───
+    // Usa flowButtons[estado] del config, si no existe cae al btnLabels estático
+    const fb = config?.flowButtons?.[item.estado];
+    const btnLabel = fb?.label || btnLabels[uiStatus];
+    const btnColor = fb?.color || btnColors[uiStatus];
     const cargando = loadingId === item.id;
 
     // ─── Design tokens (SDUI) ───
     const fs = DT?.fontSizes || {};
     const sp = DT?.spacing || {};
+    const esUrgente = item.tipo === 'URGENTE';
 
     return (
-      <View style={[s.tcard, { borderLeftColor: borderColor, padding: sp.cardPadding || 13, borderRadius: (DT?.borderRadius?.card ?? 12) }, (uiStatus === 'active' || uiStatus === 'pendiente') && s.tcardActive]}>
+      <View style={[s.tcard, { borderLeftColor: esUrgente ? '#E74C3C' : borderColor, borderLeftWidth: esUrgente ? 6 : 4, padding: sp.cardPadding || 13, borderRadius: (DT?.borderRadius?.card ?? 12) }, (uiStatus === 'active' || uiStatus === 'pendiente') && s.tcardActive]}>
         <View style={s.tcTop}>
           <Text style={[s.tcId, { fontSize: fs.micro || 9 }]}>#{item.id.slice(-6).toUpperCase()}</Text>
           <View style={[s.badge, {
@@ -405,6 +409,11 @@ export default function TicketsScreen() {
               {badgeLabel}
             </Text>
           </View>
+          {esUrgente && (
+            <View style={{ backgroundColor: '#FDEDEC', borderRadius: 4, paddingHorizontal: 6, paddingVertical: 2, marginLeft: 4 }}>
+              <Text style={{ color: '#E74C3C', fontSize: fs.micro || 9, fontWeight: '800' }}>🚨 {UL.badgeUrgente || 'URGENTE'}</Text>
+            </View>
+          )}
         </View>
 
         {item.referencia?.nombre && (
@@ -431,12 +440,12 @@ export default function TicketsScreen() {
 
         {!isDone && btnLabel && (
           <TouchableOpacity
-            style={[s.abtn, { backgroundColor: btnColor, padding: sp.buttonPadding || 16, minHeight: DT?.layout?.buttonMinHeight ?? 48, borderRadius: DT?.borderRadius?.button ?? 8 }, cargando && { opacity: 0.6 }]}
+            style={[s.abtn, { backgroundColor: btnColor, padding: sp.buttonPadding || 10, minHeight: DT?.layout?.buttonMinHeight ?? 48, borderRadius: DT?.borderRadius?.button ?? 8 }, cargando && { opacity: 0.6 }]}
             onPress={() => avanzarEstado(item)}
             disabled={cargando}
             activeOpacity={0.82}
           >
-            <Text style={[s.abtnTxt, { fontSize: fs.body || 14 }]}>{cargando ? (UL.btnCargando || 'Actualizando...') : btnLabel}</Text>
+            <Text style={[s.abtnTxt, { fontSize: fs.body || 14 }]} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.7}>{cargando ? (UL.btnCargando || 'Actualizando...') : btnLabel}</Text>
           </TouchableOpacity>
         )}
 
