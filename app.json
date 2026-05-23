@@ -55,7 +55,8 @@
           "icon": "./assets/icon.png",
           "color": "#00d4ff"
         }
-      ]
+      ],
+      "expo-background-fetch"
     ],
     "experiments": {
       "typedRoutes": true
