@@ -1,11 +1,13 @@
 /**
- * useTracking — GPS en background estilo Uber v2.
+ * useTracking — GPS en background estilo Uber v3.
  *
- * - Foreground service con notificación persistente
- * - WebSocket + REST para puntos en tiempo real
- * - Background Fetch (despertar forzado cada ~15 min) para Infinix/Huawei/Xiaomi
- * - AppState listener: al volver a foreground, reinicia tracking automáticamente
- * - Auto-creación de sesión si el backend la cerró por inactividad
+ * MULTI-CAPA para funcionar en Infinix/Xiaomi/Huawei:
+ * 1. Foreground service con notificación persistente
+ * 2. Background location task (expo-location)
+ * 3. Direct fetch en background (sin axios interceptors)
+ * 4. Background Fetch cada ~1 min
+ * 5. AppState listener: revive tracking al desbloquear
+ * 6. getCurrentPositionAsync fallback si location updates no llegan
  */
 
 import { useRef, useCallback, useEffect } from 'react';
@@ -22,17 +24,63 @@ const GPS_TASK = 'SGLAB_GPS_TASK';
 const BG_FETCH_TASK = 'SGLAB_BG_FETCH';
 const INTERVAL_MS = 5000; // cada 5 segundos en foreground
 const TRACKING_FLAG = 'sglab_tracking_active';
+const API_BASE = 'https://recojossglab.duckdns.org/api';
 
-// ─── Task de background GPS (corre aunque app esté minimizada) ──
+// ─── Helper: enviar punto directamente (sin axios, más robusto en background) ──
+async function sendPointDirect(payload: any) {
+  try {
+    const token = await SecureStore.getItemAsync('accessToken');
+    if (!token) {
+      // Fallback a axios si no hay token directo
+      await api.post('/tracking/point', payload);
+      return;
+    }
+    await fetch(`${API_BASE}/tracking/point`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${token}`,
+      },
+      body: JSON.stringify(payload),
+    });
+  } catch (err) {
+    console.warn('[Tracking] sendPointDirect error:', err);
+  }
+}
+
+// ─── Task de background GPS (corre aunque app esté minimizada/bloqueada) ──
 TaskManager.defineTask(GPS_TASK, async ({ data, error }: any) => {
-  if (error || !data?.locations?.[0]) return;
-  const loc = data.locations[0];
-  const payload = {
-    latitud: loc.coords.latitude,
-    longitud: loc.coords.longitude,
-    velocidad: loc.coords.speed ?? 0,
-  };
-  try { await api.post('/tracking/point', payload); } catch (err) { console.warn('[Tracking] Error enviando punto GPS:', err); }
+  if (error) {
+    console.error('[BG] GPS task error:', error);
+    return;
+  }
+
+  // Si hay datos del sistema, úsalos
+  if (data?.locations?.[0]) {
+    const loc = data.locations[0];
+    const payload = {
+      latitud: loc.coords.latitude,
+      longitud: loc.coords.longitude,
+      velocidad: loc.coords.speed ?? 0,
+    };
+    await sendPointDirect(payload);
+    return;
+  }
+
+  // Fallback: obtener ubicación manual si el sistema no entregó datos
+  try {
+    const loc = await Location.getCurrentPositionAsync({
+      accuracy: Location.Accuracy.High,
+    });
+    const payload = {
+      latitud: loc.coords.latitude,
+      longitud: loc.coords.longitude,
+      velocidad: loc.coords.speed ?? 0,
+    };
+    await sendPointDirect(payload);
+  } catch (err) {
+    console.warn('[BG] getCurrentPositionAsync fallback error:', err);
+  }
 });
 
 // ─── Background Fetch: salvavidas para fabricantes agresivos ──
@@ -46,8 +94,7 @@ TaskManager.defineTask(BG_FETCH_TASK, async () => {
       longitud: loc.coords.longitude,
       velocidad: loc.coords.speed ?? 0,
     };
-    // Intentar por REST (más confiable que WS en background)
-    await api.post('/tracking/point', payload);
+    await sendPointDirect(payload);
     return BackgroundFetch.BackgroundFetchResult.NewData;
   } catch {
     return BackgroundFetch.BackgroundFetchResult.NoData;
@@ -58,8 +105,6 @@ export const useTracking = () => {
   const interval = useRef<any>(null);
   const active = useRef(false);
   const appStateRef = useRef<AppStateStatus>(AppState.currentState);
-
-
 
   const startTracking = useCallback(async (): Promise<boolean> => {
     if (active.current) return true;
@@ -75,16 +120,16 @@ export const useTracking = () => {
         }
       }
 
-      // 2. Iniciar sesión via REST (falla si ya hay una activa, no es crítico)
+      // 2. Iniciar sesión via REST
       try { await api.post('/tracking/start', {}); } catch {}
 
-      // 3. Keep-awake (no crítico)
+      // 3. Keep-awake
       try { await KeepAwake.activateKeepAwakeAsync(); } catch {}
 
       active.current = true;
       await SecureStore.setItemAsync(TRACKING_FLAG, 'true');
 
-      // 4. Foreground polling — envía puntos via WebSocket + REST fallback
+      // 4. Foreground polling — cada 5s mientras app visible
       interval.current = setInterval(async () => {
         try {
           const loc = await Location.getCurrentPositionAsync({
@@ -104,7 +149,7 @@ export const useTracking = () => {
         } catch (err) { console.warn('[Tracking] Error en foreground polling:', err); }
       }, INTERVAL_MS);
 
-      // 5. Background task (GPS continuo en segundo plano)
+      // 5. Background task (GPS en segundo plano)
       const bg = await Location.requestBackgroundPermissionsAsync();
       if (bg.status === 'granted') {
         const isRunning = await Location.hasStartedLocationUpdatesAsync(GPS_TASK);
@@ -113,7 +158,7 @@ export const useTracking = () => {
         await Location.startLocationUpdatesAsync(GPS_TASK, {
           accuracy: Location.Accuracy.High,
           timeInterval: INTERVAL_MS,
-          distanceInterval: 10,
+          distanceInterval: 5, // cada 5 metros (antes 10)
           showsBackgroundLocationIndicator: true,
           foregroundService: {
             notificationTitle: '🏍️ SGLab Moto activo',
@@ -122,17 +167,19 @@ export const useTracking = () => {
           },
           pausesUpdatesAutomatically: false,
           activityType: Location.ActivityType.AutomotiveNavigation,
+          deferredUpdatesInterval: 0,     // NO diferir actualizaciones
+          deferredUpdatesDistance: 0,     // NO diferir por distancia
         });
       }
 
-      // 6. Background Fetch — salvavidas para fabricantes agresivos
+      // 6. Background Fetch — cada 1 min (respetado o no según fabricante)
       try {
         const status = await BackgroundFetch.getStatusAsync();
         if (status === BackgroundFetch.BackgroundFetchStatus.Denied) {
           console.warn('[Tracking] Background Fetch denegado');
         } else {
           await BackgroundFetch.registerTaskAsync(BG_FETCH_TASK, {
-            minimumInterval: 1, // 1 minuto (Android lo respeta o lo fuerza a ~15)
+            minimumInterval: 1,
             stopOnTerminate: false,
             startOnBoot: true,
           });
@@ -152,26 +199,21 @@ export const useTracking = () => {
   const stopTracking = useCallback(async () => {
     if (!active.current) return;
 
-    // 1. Limpiar polling
     if (interval.current) clearInterval(interval.current);
 
-    // 2. Detener background task GPS
     const isRunning = await Location.hasStartedLocationUpdatesAsync(GPS_TASK);
     if (isRunning) await Location.stopLocationUpdatesAsync(GPS_TASK);
 
-    // 3. Desregistrar Background Fetch
     try {
       await BackgroundFetch.unregisterTaskAsync(BG_FETCH_TASK);
     } catch {}
 
-    // 4. Notificar servidor
     try { await api.post('/tracking/stop', {}); } catch {}
     try {
       const socket = await getSocket();
       socket.emit('tracking:stop');
     } catch {}
 
-    // 5. Liberar keep-awake
     try { await KeepAwake.deactivateKeepAwake(); } catch {}
 
     await SecureStore.setItemAsync(TRACKING_FLAG, 'false');
@@ -181,24 +223,21 @@ export const useTracking = () => {
   // ─── AppState Listener — revive tracking al desbloquear ──
   useEffect(() => {
     const sub = AppState.addEventListener('change', async (nextState) => {
-      // Si la app vuelve a foreground (desbloqueo)
       if (nextState === 'active') {
-        // Verificar si tracking estaba activo antes de morir
         try {
           const wasActive = await SecureStore.getItemAsync(TRACKING_FLAG);
           if (wasActive === 'true') {
             console.log('[Tracking] App foreground — tracking revive');
-            // Pequeño delay para que todo se inicialice
             setTimeout(async () => {
               try {
-                // Permiso foreground
+                // Re-request permissions (algunas ROMs las revocan en bg)
                 const fg = await Location.requestForegroundPermissionsAsync();
                 if (fg.status !== 'granted') return;
 
                 await api.post('/tracking/start', {});
                 active.current = true;
 
-                // Foreground polling
+                // Reanudar polling foreground
                 interval.current = setInterval(async () => {
                   try {
                     const loc = await Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.High });
@@ -208,7 +247,7 @@ export const useTracking = () => {
                   } catch {}
                 }, INTERVAL_MS);
 
-                // Background task
+                // Reanudar background task
                 const bg = await Location.requestBackgroundPermissionsAsync();
                 if (bg.status === 'granted') {
                   const running = await Location.hasStartedLocationUpdatesAsync(GPS_TASK);
@@ -216,7 +255,7 @@ export const useTracking = () => {
                   await Location.startLocationUpdatesAsync(GPS_TASK, {
                     accuracy: Location.Accuracy.High,
                     timeInterval: INTERVAL_MS,
-                    distanceInterval: 10,
+                    distanceInterval: 5,
                     showsBackgroundLocationIndicator: true,
                     foregroundService: {
                       notificationTitle: '🏍️ SGLab Moto activo',
@@ -225,15 +264,17 @@ export const useTracking = () => {
                     },
                     pausesUpdatesAutomatically: false,
                     activityType: Location.ActivityType.AutomotiveNavigation,
+                    deferredUpdatesInterval: 0,
+                    deferredUpdatesDistance: 0,
                   });
                 }
 
-                // Background fetch
+                // Re-registrar Background Fetch
                 try {
                   const bfStatus = await BackgroundFetch.getStatusAsync();
                   if (bfStatus === BackgroundFetch.BackgroundFetchStatus.Available) {
                     await BackgroundFetch.registerTaskAsync(BG_FETCH_TASK, {
-                      minimumInterval: 60,
+                      minimumInterval: 1,
                       stopOnTerminate: false,
                       startOnBoot: true,
                     });
@@ -257,7 +298,6 @@ export const useTracking = () => {
 
 /**
  * Detiene todo el tracking GPS desde fuera del hook.
- * Útil para logout o cuando se necesita forzar la parada sin acceso a la instancia del hook.
  */
 export async function forceStopAllTracking() {
   try {
