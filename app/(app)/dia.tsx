@@ -9,6 +9,7 @@ import { api } from '../../src/api/client';
 import { disconnectSocket } from '../../src/socket/socket';
 import { deactivateKeepAwake } from 'expo-keep-awake';
 import { send as log } from '../../src/lib/LogReporter';
+import { forceStopAllTracking } from '../../src/hooks/useTracking';
 
 // Colores por defecto (fallback si no carga config del VPS)
 const FALLBACK = {
@@ -73,6 +74,7 @@ export default function DiaScreen() {
     Alert.alert('Cerrar sesión', '¿Seguro que quieres cerrar sesión?', [
       { text: 'Cancelar', style: 'cancel' },
       { text: 'Salir', style: 'destructive', onPress: async () => {
+        forceStopAllTracking();
         deactivateKeepAwake();
         disconnectSocket();
         try { await api.patch('/motorizados/me/estado', { estado: 'OFFLINE' }); } catch (e) { log('WARN', 'dia', 'Error estado OFFLOAD: ' + String(e)); }

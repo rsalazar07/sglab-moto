@@ -59,72 +59,7 @@ export const useTracking = () => {
   const active = useRef(false);
   const appStateRef = useRef<AppStateStatus>(AppState.currentState);
 
-  // ─── AppState Listener: auto-restart al volver a foreground ──
-  useEffect(() => {
-    const subscription = AppState.addEventListener('change', (nextState: AppStateStatus) => {
-      const prevState = appStateRef.current;
-      appStateRef.current = nextState;
 
-      // Si venía de background y ahora está en foreground
-      if (
-        prevState.match(/inactive|background/) &&
-        nextState === 'active'
-      ) {
-        restartForeground();
-      }
-    });
-
-    return () => subscription.remove();
-  }, []);
-
-  const restartForeground = useCallback(async () => {
-    if (!active.current) return; // Solo si seguimos "en turno"
-
-    // Limpiar interval anterior por si acaso
-    if (interval.current) clearInterval(interval.current);
-
-    console.log('[Tracking] App foreground — reiniciando polling GPS');
-
-    // Iniciar nuevo polling
-    interval.current = setInterval(async () => {
-      try {
-        const loc = await Location.getCurrentPositionAsync({
-          accuracy: Location.Accuracy.High,
-        });
-        const payload = {
-          latitud: loc.coords.latitude,
-          longitud: loc.coords.longitude,
-          velocidad: loc.coords.speed ?? 0,
-        };
-        try {
-          const socket = await getSocket();
-          socket.emit('tracking:point', payload);
-        } catch {
-          await api.post('/tracking/point', payload);
-        }
-      } catch {}
-    }, INTERVAL_MS);
-
-    // Re-asegurar que la task de background sigue activa
-    try {
-      const isRunning = await Location.hasStartedLocationUpdatesAsync(GPS_TASK);
-      if (!isRunning) {
-        await Location.startLocationUpdatesAsync(GPS_TASK, {
-          accuracy: Location.Accuracy.High,
-          timeInterval: INTERVAL_MS,
-          distanceInterval: 10,
-          showsBackgroundLocationIndicator: true,
-          foregroundService: {
-            notificationTitle: '🏍️ SGLab Moto activo',
-            notificationBody: 'Enviando ubicación en tiempo real',
-            notificationColor: '#00d4ff',
-          },
-          pausesUpdatesAutomatically: false,
-          activityType: Location.ActivityType.AutomotiveNavigation,
-        });
-      }
-    } catch {}
-  }, []);
 
   const startTracking = useCallback(async (): Promise<boolean> => {
     if (active.current) return true;
@@ -147,6 +82,7 @@ export const useTracking = () => {
       try { await KeepAwake.activateKeepAwakeAsync(); } catch {}
 
       active.current = true;
+      await SecureStore.setItemAsync(TRACKING_FLAG, 'true');
 
       // 4. Foreground polling — envía puntos via WebSocket + REST fallback
       interval.current = setInterval(async () => {
@@ -238,6 +174,7 @@ export const useTracking = () => {
     // 5. Liberar keep-awake
     try { await KeepAwake.deactivateKeepAwake(); } catch {}
 
+    await SecureStore.setItemAsync(TRACKING_FLAG, 'false');
     active.current = false;
   }, []);
 
@@ -317,3 +254,22 @@ export const useTracking = () => {
 
   return { startTracking, stopTracking };
 };
+
+/**
+ * Detiene todo el tracking GPS desde fuera del hook.
+ * Útil para logout o cuando se necesita forzar la parada sin acceso a la instancia del hook.
+ */
+export async function forceStopAllTracking() {
+  try {
+    const isRunning = await Location.hasStartedLocationUpdatesAsync(GPS_TASK);
+    if (isRunning) await Location.stopLocationUpdatesAsync(GPS_TASK);
+  } catch {}
+  try { await BackgroundFetch.unregisterTaskAsync(BG_FETCH_TASK); } catch {}
+  try { await api.post('/tracking/stop', {}); } catch {}
+  try {
+    const socket = await getSocket();
+    socket.emit('tracking:stop');
+  } catch {}
+  try { await KeepAwake.deactivateKeepAwake(); } catch {}
+  try { await SecureStore.setItemAsync(TRACKING_FLAG, 'false'); } catch {}
+}
