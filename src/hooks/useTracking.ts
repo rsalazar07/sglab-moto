@@ -32,7 +32,7 @@ TaskManager.defineTask(GPS_TASK, async ({ data, error }: any) => {
     longitud: loc.coords.longitude,
     velocidad: loc.coords.speed ?? 0,
   };
-  try { await api.post('/tracking/point', payload); } catch {}
+  try { await api.post('/tracking/point', payload); } catch (err) { console.warn('[Tracking] Error enviando punto GPS:', err); }
 });
 
 // ─── Background Fetch: salvavidas para fabricantes agresivos ──
@@ -101,7 +101,7 @@ export const useTracking = () => {
           } catch {
             await api.post('/tracking/point', payload);
           }
-        } catch {}
+        } catch (err) { console.warn('[Tracking] Error en foreground polling:', err); }
       }, INTERVAL_MS);
 
       // 5. Background task (GPS continuo en segundo plano)
@@ -182,7 +182,7 @@ export const useTracking = () => {
   useEffect(() => {
     const sub = AppState.addEventListener('change', async (nextState) => {
       // Si la app vuelve a foreground (desbloqueo)
-      if (nextState === 'active' && !active.current) {
+      if (nextState === 'active') {
         // Verificar si tracking estaba activo antes de morir
         try {
           const wasActive = await SecureStore.getItemAsync(TRACKING_FLAG);
