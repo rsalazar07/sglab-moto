@@ -62,8 +62,7 @@
           "color": "#00d4ff"
         }
       ],
-      "expo-background-fetch",
-      "react-native-background-actions"
+      "expo-background-fetch"
     ],
     "experiments": {
       "typedRoutes": true
