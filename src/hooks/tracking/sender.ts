@@ -8,7 +8,7 @@
 
 import * as SecureStore from 'expo-secure-store';
 
-const API_BASE = 'https://recojossglab.duckdns.org/api';
+const API_BASE = process.env.EXPO_PUBLIC_API_URL ?? 'https://recojossglab.duckdns.org/api';
 
 export interface TrackingPayload {
   latitud: number;

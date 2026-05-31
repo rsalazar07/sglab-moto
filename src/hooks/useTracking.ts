@@ -32,6 +32,10 @@ const INTERVAL_MS = 5000;
 const TRACKING_FLAG = 'sglab_tracking_active';
 const FLUSH_INTERVAL_MS = 30000;
 
+// Referencias a nivel de módulo para que forceStopAllTracking pueda limpiar los intervals
+let _globalInterval: any = null;
+let _globalFlushInterval: any = null;
+
 export const useTracking = () => {
   const interval = useRef<any>(null);
   const flushInterval = useRef<any>(null);
@@ -60,6 +64,10 @@ export const useTracking = () => {
       active.current = true;
       await SecureStore.setItemAsync(TRACKING_FLAG, 'true');
 
+      // Sincronizar referencias globales para forceStopAllTracking
+      _globalInterval = null;
+      _globalFlushInterval = null;
+
       // ═══ TIER 1: expo-location foreground service (ÚNICO) ═══
       // Esto mantiene el GPS activo incluso con teléfono bloqueado
       // usando el foreground service NATIVO de expo-location
@@ -78,6 +86,7 @@ export const useTracking = () => {
           console.log(`[Tracking] Offline queue: ${sent} puntos recuperados`);
         }
       }, FLUSH_INTERVAL_MS);
+      _globalFlushInterval = flushInterval.current;
 
       // ─── Foreground polling (solo cuando app visible) ──
       // WebSocket para tiempo real mientras la app está visible
@@ -103,6 +112,7 @@ export const useTracking = () => {
           console.warn('[Tracking] Error en foreground polling:', err);
         }
       }, INTERVAL_MS);
+      _globalInterval = interval.current;
 
       console.log('[Tracking] ✅ Tracking iniciado (expo-location)');
       return true;
@@ -117,9 +127,15 @@ export const useTracking = () => {
 
     // 1. Detener foreground polling
     if (interval.current) clearInterval(interval.current);
+    interval.current = null;
 
     // 2. Detener flush de offline queue
     if (flushInterval.current) clearInterval(flushInterval.current);
+    flushInterval.current = null;
+
+    // Limpiar referencias globales
+    _globalInterval = null;
+    _globalFlushInterval = null;
 
     // 3. Detener Tier 1: expo-location task
     await stopLocationTask();
@@ -169,6 +185,7 @@ export const useTracking = () => {
                 await registerBackgroundFetch();
 
                 // Foreground polling (WebSocket para tiempo real)
+                if (interval.current) clearInterval(interval.current);
                 interval.current = setInterval(async () => {
                   try {
                     const loc = await Location.getCurrentPositionAsync({
@@ -182,9 +199,20 @@ export const useTracking = () => {
                     const socket = await getSocket();
                     socket.emit('tracking:point', payload);
                   } catch {
-                    // WebSocket puede fallar al reconectar
+                    // Si WebSocket falla, reintentar con REST
+                    try {
+                      const loc = await Location.getCurrentPositionAsync({
+                        accuracy: Location.Accuracy.High,
+                      });
+                      await api.post('/tracking/point', {
+                        latitud: loc.coords.latitude,
+                        longitud: loc.coords.longitude,
+                        velocidad: loc.coords.speed ?? 0,
+                      });
+                    } catch {}
                   }
                 }, INTERVAL_MS);
+                _globalInterval = interval.current;
 
                 // Keep-awake
                 try { await KeepAwake.activateKeepAwakeAsync(); } catch {}
@@ -207,8 +235,19 @@ export const useTracking = () => {
 
 /**
  * Detiene TODO el tracking desde fuera del hook.
+ * También limpia los intervals de foreground polling y flush.
  */
 export async function forceStopAllTracking() {
+  // Limpiar intervals creados por el hook (vía refs globales)
+  if (_globalInterval) {
+    clearInterval(_globalInterval);
+    _globalInterval = null;
+  }
+  if (_globalFlushInterval) {
+    clearInterval(_globalFlushInterval);
+    _globalFlushInterval = null;
+  }
+
   await stopLocationTask();
   await unregisterBackgroundFetch();
   try { await flushQueue(); } catch {}
