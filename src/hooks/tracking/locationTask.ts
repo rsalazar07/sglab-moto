@@ -1,11 +1,12 @@
 /**
- * locationTask.ts — Tier 2: expo-location background task (COMPLEMENTO).
+ * locationTask.ts — Tier 1: expo-location foreground service (ÚNICO).
  *
- * Usa el task manager de expo-location para recibir ubicaciones
- * cuando Android las entrega. Es COMPLEMENTO del foreground service.
+ * Este es el MECANISMO PRINCIPAL de tracking en background.
+ * Usa el foreground service NATIVO de expo-location con notificación
+ * persistente. Funciona incluso con el teléfono bloqueado.
  *
- * Si Android entrega datos (algunos fabricantes sí lo hacen a veces),
- * enviamos el punto. Si no, el Tier 1 (BackgroundActions) se encarga.
+ * NOTA: No usar con react-native-background-actions. Ambos crean
+ * foreground services separados causando conflictos en Android 14+.
  */
 
 import * as Location from 'expo-location';
@@ -37,35 +38,18 @@ TaskManager.defineTask(LOCATION_TASK, async ({ data, error }: any) => {
     }
     return;
   }
-
-  // Fallback: obtener ubicación manual
-  try {
-    const loc = await Location.getCurrentPositionAsync({
-      accuracy: Location.Accuracy.High,
-    });
-    const payload = {
-      latitud: loc.coords.latitude,
-      longitud: loc.coords.longitude,
-      velocidad: loc.coords.speed ?? 0,
-    };
-
-    const ok = await sendPoint(payload);
-    if (!ok) {
-      await addToQueue(payload);
-    }
-  } catch (err) {
-    console.warn('[Tracking] LocationTask fallback error:', err);
-  }
 });
 
 /**
- * Inicia las actualizaciones de ubicación en background (expo-location).
+ * Inicia las actualizaciones de ubicación en background con foreground service.
+ * NO reinicia si ya está corriendo.
  */
 export async function startLocationTask() {
   try {
     const isRunning = await Location.hasStartedLocationUpdatesAsync(LOCATION_TASK);
     if (isRunning) {
-      await Location.stopLocationUpdatesAsync(LOCATION_TASK);
+      console.log('[Tracking] LocationTask ya está corriendo');
+      return;
     }
 
     await Location.startLocationUpdatesAsync(LOCATION_TASK, {
@@ -83,6 +67,7 @@ export async function startLocationTask() {
       deferredUpdatesInterval: 0,
       deferredUpdatesDistance: 0,
     });
+    console.log('[Tracking] LocationTask iniciado ✅');
   } catch (err) {
     console.warn('[Tracking] Error iniciando LocationTask:', err);
   }
@@ -96,6 +81,7 @@ export async function stopLocationTask() {
     const isRunning = await Location.hasStartedLocationUpdatesAsync(LOCATION_TASK);
     if (isRunning) {
       await Location.stopLocationUpdatesAsync(LOCATION_TASK);
+      console.log('[Tracking] LocationTask detenido');
     }
   } catch (err) {
     console.warn('[Tracking] Error deteniendo LocationTask:', err);
