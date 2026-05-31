@@ -43,7 +43,10 @@ const serviceOptions = {
     delay: INTERVAL_MS,
   },
   // SINGULAR, correcto. Array de tipos de foreground service.
-  foregroundServiceType: ['location'] as Array<'location'>,
+  // NOTA: NO usamos foregroundServiceType porque la librería
+  // no declara android:foregroundServiceType en su manifest.
+  // Sin esto, funciona en todas las versiones de Android.
+  // Con esto, crashea en Android 14+ por MissingForegroundServiceTypeException.
   autoStart: false,
   progressBar: {
     max: 100,
