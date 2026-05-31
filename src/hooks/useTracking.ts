@@ -1,15 +1,19 @@
 /**
- * useTracking — GPS en background con expo-location (SIMPLIFICADO).
+ * useTracking — GPS en background con 4 TIERS + WAKE_LOCK.
  *
- * ARQUITECTURA (3 TIERS):
- * Tier 1: expo-location startLocationUpdatesAsync → foreground service nativo
- *   → Mantiene GPS activo incluso con teléfono bloqueado (notif persistente)
- *   → Envía ubicaciones vía sender.fetch()
- * Tier 2: expo-background-fetch → keepalive cada ~1-15 min
- * Tier 3: Offline Queue → AsyncStorage cuando no hay conexión
+ * ARQUITECTURA (4 TIERS):
+ * Tier 1: react-native-background-actions → foreground service con WAKE_LOCK
+ *   → Mantiene CPU activo con teléfono bloqueado (ESENCIAL en XOS/Infinix)
+ *   → Obtiene GPS cada 5s vía getCurrentPositionAsync
+ *   → Envía vía sender.fetch()
+ * Tier 2: expo-location startLocationUpdatesAsync → foreground service nativo
+ *   → Respaldo si Tier 1 falla
+ * Tier 3: expo-background-fetch → keepalive cada ~1-15 min
+ * Tier 4: Offline Queue → AsyncStorage cuando no hay conexión
  *
  * + AppState listener: revive tracking al desbloquear
  * + Diálogo de optimización de batería (crítico en Infinix)
+ * + requestIgnoreBatteryOptimizations (Android 6+)
  */
 
 import { useRef, useCallback, useEffect } from 'react';
@@ -26,7 +30,15 @@ import {
   registerBackgroundFetch,
   unregisterBackgroundFetch,
 } from './tracking/backgroundFetch';
-import { showBatteryOptimizationDialog } from './tracking/batteryDialog';
+import {
+  startBackgroundService,
+  stopBackgroundService,
+  isBackgroundServiceRunning,
+} from './tracking/backgroundActions';
+import {
+  showBatteryOptimizationDialog,
+  requestIgnoreBatteryOptimizations,
+} from './tracking/batteryDialog';
 
 const INTERVAL_MS = 5000;
 const TRACKING_FLAG = 'sglab_tracking_active';
@@ -52,8 +64,9 @@ export const useTracking = () => {
         return false;
       }
 
-      // 2. Diálogo de batería (solo primera vez, solo Android)
+      // 2. Diálogos de batería (solo primera vez, solo Android)
       showBatteryOptimizationDialog();
+      requestIgnoreBatteryOptimizations();
 
       // 3. Iniciar sesión via REST
       try { await api.post('/tracking/start', {}); } catch {}
@@ -68,18 +81,26 @@ export const useTracking = () => {
       _globalInterval = null;
       _globalFlushInterval = null;
 
-      // ═══ TIER 1: expo-location foreground service (ÚNICO) ═══
-      // Esto mantiene el GPS activo incluso con teléfono bloqueado
-      // usando el foreground service NATIVO de expo-location
-      const bg = await Location.requestBackgroundPermissionsAsync();
-      if (bg.status === 'granted') {
+      // ═══ TIER 1: background-actions con WAKE_LOCK (PRINCIPAL) ═══
+      // Este es el foreground service con WAKE_LOCK que mantiene el CPU
+      // activo con el teléfono bloqueado. Obtiene GPS cada 5s internamente.
+      const bgActionsStarted = await startBackgroundService();
+      if (!bgActionsStarted) {
+        console.warn('[Tracking] Tier 1 (WAKE_LOCK) falló, continuando con Tier 2');
+      }
+
+      // ═══ TIER 2: expo-location foreground service (RESPALDO) ═══
+      // El foreground service nativo de expo-location como respaldo.
+      // NO tiene WAKE_LOCK pero algunos fabricantes lo respetan.
+      const bgPerm = await Location.requestBackgroundPermissionsAsync();
+      if (bgPerm.status === 'granted') {
         await startLocationTask();
       }
 
-      // ═══ TIER 2: BackgroundFetch (KEEPALIVE) ═══
+      // ═══ TIER 3: BackgroundFetch (KEEPALIVE) ═══
       await registerBackgroundFetch();
 
-      // ═══ TIER 3: Offline Queue (RESPALDO) ═══
+      // ═══ TIER 4: Offline Queue (RESPALDO) ═══
       flushInterval.current = setInterval(async () => {
         const sent = await flushQueue();
         if (sent > 0) {
@@ -114,7 +135,7 @@ export const useTracking = () => {
       }, INTERVAL_MS);
       _globalInterval = interval.current;
 
-      console.log('[Tracking] ✅ Tracking iniciado (expo-location)');
+      console.log('[Tracking] ✅ Tracking iniciado (4 tiers)');
       return true;
     } catch (err) {
       console.warn('[Tracking] Error iniciando tracking:', err);
@@ -137,26 +158,29 @@ export const useTracking = () => {
     _globalInterval = null;
     _globalFlushInterval = null;
 
-    // 3. Detener Tier 1: expo-location task
+    // 3. Detener Tier 1: background-actions (WAKE_LOCK)
+    await stopBackgroundService();
+
+    // 4. Detener Tier 2: expo-location task
     await stopLocationTask();
 
-    // 4. Detener Tier 2: BackgroundFetch
+    // 5. Detener Tier 3: BackgroundFetch
     await unregisterBackgroundFetch();
 
-    // 5. Hacer flush final de offline queue
+    // 6. Hacer flush final de offline queue
     try { await flushQueue(); } catch {}
 
-    // 6. Notificar servidor
+    // 7. Notificar servidor
     try { await api.post('/tracking/stop', {}); } catch {}
     try {
       const socket = await getSocket();
       socket.emit('tracking:stop');
     } catch {}
 
-    // 7. Liberar keep-awake
+    // 8. Liberar keep-awake
     try { await KeepAwake.deactivateKeepAwake(); } catch {}
 
-    // 8. Limpiar flag
+    // 9. Limpiar flag
     await SecureStore.setItemAsync(TRACKING_FLAG, 'false');
     active.current = false;
     console.log('[Tracking] ✅ Tracking detenido');
@@ -175,13 +199,18 @@ export const useTracking = () => {
                 // Re-asegurar permisos
                 await Location.requestForegroundPermissionsAsync();
 
-                // Asegurar que Tier 1 sigue vivo
+                // Revivir Tier 1: background-actions (WAKE_LOCK)
+                if (!isBackgroundServiceRunning()) {
+                  await startBackgroundService();
+                }
+
+                // Revivir Tier 2: expo-location
                 const bg = await Location.requestBackgroundPermissionsAsync();
                 if (bg.status === 'granted') {
                   await startLocationTask();
                 }
 
-                // Asegurar Tier 2
+                // Revivir Tier 3: BackgroundFetch
                 await registerBackgroundFetch();
 
                 // Foreground polling (WebSocket para tiempo real)
@@ -248,6 +277,7 @@ export async function forceStopAllTracking() {
     _globalFlushInterval = null;
   }
 
+  await stopBackgroundService();
   await stopLocationTask();
   await unregisterBackgroundFetch();
   try { await flushQueue(); } catch {}
