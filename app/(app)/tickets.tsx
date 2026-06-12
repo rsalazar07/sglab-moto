@@ -155,9 +155,10 @@ export default function TicketsScreen() {
       if (btn.accion === 'tomarTicket') {
         setLoadingId(ticket.id);
         try {
-          await ticketsApi.tomarTicket(ticket.id);
+          const res = await ticketsApi.tomarTicket(ticket.id);
           if (!turnoActivo) await iniciarTurno();
-          await cargarTickets();
+          // Optimistic update local sin recargar toda la lista
+          setTickets(prev => prev.map(t => t.id === ticket.id ? { ...t, estado: 'ASIGNADO', motorizadoId: res?.motorizadoId || ticket.motorizadoId } : t));
         } catch (e: any) {
           const msg = e.response?.data?.message;
           log('ERROR', 'avanzarEstado', `tomarTicket: ${e?.response?.data ? JSON.stringify(e.response.data) : e?.message || 'unknown'}`);
@@ -178,11 +179,16 @@ export default function TicketsScreen() {
 
       setLoadingId(ticket.id);
       try {
-        await (btn.body
-          ? api.post(btn.endpoint!, btn.body)
-          : api.post(btn.endpoint!));
+        const res = btn.body
+          ? await api.post(btn.endpoint!, btn.body)
+          : await api.post(btn.endpoint!);
         if (!turnoActivo) await iniciarTurno();
-        await cargarTickets();
+        // Optimistic update local: actualizar estado con lo que respondió el backend
+        if (res?.data?.estado) {
+          setTickets(prev => prev.map(t => t.id === ticket.id ? { ...t, estado: res.data.estado } : t));
+        } else if (btn.body?.estado) {
+          setTickets(prev => prev.map(t => t.id === ticket.id ? { ...t, estado: btn.body.estado } : t));
+        }
       } catch (e: any) {
         const msg = e.response?.data?.message;
         log('ERROR', 'avanzarEstado', `${btn.accion}: ${e?.response?.data ? JSON.stringify(e.response.data) : e?.message || 'unknown'}`);
@@ -208,9 +214,9 @@ export default function TicketsScreen() {
       if (uiStatus === 'pendiente') {
         setLoadingId(ticket.id);
         try {
-          await ticketsApi.tomarTicket(ticket.id);
+          const res = await ticketsApi.tomarTicket(ticket.id);
           if (!turnoActivo) await iniciarTurno();
-          await cargarTickets();
+          setTickets(prev => prev.map(t => t.id === ticket.id ? { ...t, estado: 'ASIGNADO' } : t));
         } catch (err: any) {
           const msg = err.response?.data?.message;
           Alert.alert('Error', Array.isArray(msg) ? msg[0] : msg ?? 'No se pudo tomar el pedido');
@@ -219,9 +225,9 @@ export default function TicketsScreen() {
       }
       setLoadingId(ticket.id);
       try {
-        await ticketsApi.updateEstado(ticket.id, 'EN_RUTA');
+        const res = await ticketsApi.updateEstado(ticket.id, 'EN_RUTA');
         if (!turnoActivo) await iniciarTurno();
-        await cargarTickets();
+        setTickets(prev => prev.map(t => t.id === ticket.id ? { ...t, estado: 'EN_RUTA' } : t));
       } catch (err: any) {
         const msg = err.response?.data?.message;
         Alert.alert('Error', Array.isArray(msg) ? msg[0] : msg ?? 'No se pudo actualizar');
@@ -304,7 +310,8 @@ export default function TicketsScreen() {
 
     try {
       await ticketsApi.updateEstado(id, 'RECOGIDO');
-      await cargarTickets();
+      // Optimistic update local
+      setTickets(prev => prev.map(t => t.id === id ? { ...t, estado: 'RECOGIDO' } : t));
       if (sinInfo) {
         Alert.alert('✅ Recojo completado', 'El registro se guardó sin información adicional.');
       } else if (fotoUri || refNombre || observaciones || (metodoPago && metodoPago !== 'SIN_PAGO')) {
