@@ -37,7 +37,7 @@ api.interceptors.response.use(
       });
     } catch {}
 
-    if (error.response?.status === 401 && !original._retry) {
+    if (error.response?.status === 401 && original && !original._retry) {
       original._retry = true;
       try {
         const refresh = await SecureStore.getItemAsync('refreshToken');
