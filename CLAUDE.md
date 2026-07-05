@@ -84,3 +84,24 @@ Solo 3 estados, el motorizado controla manualmente (NO el backend por GPS):
 - **Comando build (local):** `npx eas build --platform android --profile preview --local`
 - **GitHub Actions:** el workflow `build-apk.yml` corre en push a master o workflow_dispatch
 - Archivos protegidos (NO TOCAR): client.ts, auth.ts, socket.ts, authStore.ts, useTracking.ts, _layout.tsx, index.tsx, login.tsx, (app)/_layout.tsx
+
+## 🐛 BUG REPORTADO: Crash al loguear usuario nuevo
+**Síntoma:** La APK se cierra inmediatamente al hacer login con un motorizado creado desde el panel web. Los motorizados existentes (Juan Carlos, Juan Oblitas, José Machuca) funcionan normal.
+
+**Usuario de prueba:** pruebas01@sglab.com / 12345678
+
+**Lo que se sabe:**
+- El backend devuelve login exitoso (accessToken, refreshToken, user con nombre+rol+tenantId+permissions)
+- El crash ocurre DESPUÉS del login exitoso, al cargar la pantalla de tickets
+- Posibles causas:
+  - `login.tsx:58`: `setUser(res.user, res.token)` — el store espera 1 param, el 2do se ignora en JS (no crash directo)
+  - Fallo en `cargarTickets()` para usuario sin tickets
+  - Fallo en `getSocket()` para usuario nuevo
+  - `config?.ticketFlow` es null/undefined para un tenant sin config motorizados
+- **No hay stack trace** — la APK no tiene Sentry/Crashlytics
+
+**Solución deseada:**
+1. NO tocar archivos marcados como NO MODIFICAR
+2. Identificar causa exacta del crash
+3. Integrar Sentry o similar para capturar crashes futuros
+4. Hacer un build de APK de prueba
