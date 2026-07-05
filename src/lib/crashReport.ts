@@ -97,7 +97,7 @@ export function installGlobalCrashHandler(): void {
         throw e;
       }
     }, ms);
-  } as any;
+  };
 
   writeCrash('BOOT', 'Global crash handlers installed', '');
 }
