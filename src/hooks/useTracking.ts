@@ -34,24 +34,28 @@ TaskManager.defineTask(GPS_TASK, async ({ data, error }: any) => {
 });
 
 // ─── Background Fetch: salvavidas para fabricantes agresivos ──
-BackgroundFetch.defineTask(BG_FETCH_TASK, async () => {
-  try {
-    const loc = await Location.getCurrentPositionAsync({
-      accuracy: Location.Accuracy.Low,
-      maximumAge: 30000,
-    });
-    const payload = {
-      latitud: loc.coords.latitude,
-      longitud: loc.coords.longitude,
-      velocidad: loc.coords.speed ?? 0,
-    };
-    // Intentar por REST (más confiable que WS en background)
-    await api.post('/tracking/point', payload);
-    return BackgroundFetch.BackgroundFetchResult.NewData;
-  } catch {
-    return BackgroundFetch.BackgroundFetchResult.NoData;
-  }
-});
+try {
+  TaskManager.defineTask(BG_FETCH_TASK, async () => {
+    try {
+      const loc = await Location.getCurrentPositionAsync({
+        accuracy: Location.Accuracy.Low,
+        maximumAge: 30000,
+      });
+      const payload = {
+        latitud: loc.coords.latitude,
+        longitud: loc.coords.longitude,
+        velocidad: loc.coords.speed ?? 0,
+      };
+      // Intentar por REST (más confiable que WS en background)
+      await api.post('/tracking/point', payload);
+      return BackgroundFetch.BackgroundFetchResult.NewData;
+    } catch {
+      return BackgroundFetch.BackgroundFetchResult.NoData;
+    }
+  });
+} catch (e) {
+  console.warn('[useTracking] BG fetch task registration failed:', e);
+}
 
 export const useTracking = () => {
   const interval = useRef<any>(null);
