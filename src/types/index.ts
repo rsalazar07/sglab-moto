@@ -19,8 +19,7 @@ export interface Ticket {
   direccionRecojo?: string;
   referencia: {
     id: string;
-    nombre: string;
-    nombreComercial?: string;
+    nombreComercial: string;
     direccion: string;
     latitud?: number;
     longitud?: number;

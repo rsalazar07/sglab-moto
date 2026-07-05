@@ -1,4 +1,4 @@
-import { useEffect, useState, useCallback, useRef } from 'react';
+import { useEffect, useState, useCallback, useRef, memo } from 'react';
 import {
   View, Text, FlatList, TouchableOpacity, StyleSheet,
   RefreshControl, Alert, Modal, TextInput, ScrollView,
@@ -31,6 +31,129 @@ const C_FALLBACK = {
 
 type MetodoPago = 'EFECTIVO' | 'YAPE' | 'TRANSFERENCIA' | 'SIN_PAGO';
 
+const CLIENT_FLOW_MAP: Record<string, {
+  accion: string;
+  endpoint: ((id: string) => string) | null;
+  body?: any;
+  abreModal?: boolean;
+}> = {
+  PENDIENTE: { accion: 'tomarTicket', endpoint: (id) => `/tickets/${id}/tomar` },
+  ASIGNADO:  { accion: 'irAhora',     endpoint: (id) => `/tickets/${id}/cambiar-estado`, body: { estado: 'EN_RUTA' } },
+  EN_RUTA:   { accion: 'llegue',      endpoint: (id) => `/tickets/${id}/cambiar-estado`, body: { estado: 'EN_RECOJO' }, abreModal: true },
+  EN_RECOJO: { accion: 'completarRecojo', endpoint: null, abreModal: true },
+  RECOGIDO:  { accion: 'dejarEnLab',  endpoint: (id) => `/tickets/${id}/cambiar-estado`, body: { estado: 'EN_LABORATORIO' } },
+  EN_LABORATORIO: { accion: 'entregar', endpoint: (id) => `/tickets/${id}/cambiar-estado`, body: { estado: 'ENTREGADO' } },
+};
+
+const TicketCard = memo(({ item, config, loadingId, onAvanzar }: {
+  item: Ticket;
+  config: any;
+  loadingId: string | null;
+  onAvanzar: (ticket: Ticket) => void;
+}) => {
+  const C = config?.dashboard?.colors || C_FALLBACK;
+  const DT = config?.designTokens || {};
+  const UL = config?.uiLabels || {};
+  const SC = config?.screenConfig || {};
+  const screen = SC?.tickets || {};
+
+  const tf2 = config?.ticketFlow || {};
+  const uiStatus = tf2[item.estado] || 'done';
+  const isDone = uiStatus === 'done';
+  const borderColor = uiStatus === 'pendiente' ? C.blue : uiStatus === 'pending' ? C.orange : uiStatus === 'active' ? C.blue : C.green;
+
+  const estadoLabels: Record<string, string> = {
+    PENDIENTE: UL.badgePendiente || '📋 PENDIENTE',
+    ASIGNADO: UL.badgeAsignado || '🔄 ASIGNADO',
+    EN_RUTA: UL.badgeEnRuta || '🏍️ EN RUTA',
+    EN_RECOJO: UL.badgeEnRecojo || UL.badgeEnRuta || '🏍️ EN RUTA',
+    RECOGIDO: UL.badgeRecogido || '🔵 RECOGIDO',
+    EN_LABORATORIO: UL.badgeEnLaboratorio || '🧪 EN LAB',
+    ENTREGADO: UL.badgeEntregado || '✅ ENTREGADO',
+    CERRADO: UL.badgeCerrado || '🔒 CERRADO',
+    CANCELADO: UL.badgeCancelado || '❌ CANCELADO',
+    FALLIDO: UL.badgeFallido || '⚠️ FALLIDO',
+  };
+  const badgeLabel = estadoLabels[item.estado] || item.estado;
+  const btnLabels: Record<string, string> = {
+    pendiente: UL.btnTomarPedido || '📋 Tomar pedido',
+    pending: UL.btnVoyAhora || '🏍️ Voy ahora',
+    active: UL.btnYaRecogi || '🧪 Ya recogí',
+  };
+  const btnColors: Record<string, string> = {
+    pendiente: C.blue,
+    pending: C.orange,
+    active: C.blue,
+  };
+  const fb = config?.flowButtons?.[item.estado];
+  const btnLabel = fb?.label || btnLabels[uiStatus];
+  const btnColor = fb?.color || btnColors[uiStatus];
+  const cargando = loadingId === item.id;
+
+  const fs = DT?.fontSizes || {};
+  const sp = DT?.spacing || {};
+  const esUrgente = item.tipo === 'URGENTE';
+
+  return (
+    <View style={[s.tcard, { borderLeftColor: esUrgente ? '#E74C3C' : borderColor, borderLeftWidth: esUrgente ? 6 : 4, padding: sp.cardPadding || 13, borderRadius: (DT?.borderRadius?.card ?? 12) }, (uiStatus === 'active' || uiStatus === 'pendiente') && s.tcardActive]}>
+      <View style={s.tcTop}>
+        <Text style={[s.tcId, { fontSize: fs.micro || 9 }]}>#{item.id.slice(-6).toUpperCase()}</Text>
+        <View style={[s.badge, {
+          backgroundColor: uiStatus === 'pendiente' ? C.blueLight : uiStatus === 'pending' ? C.orangeLight : uiStatus === 'active' ? C.blueLight : C.grayLight,
+          borderColor: uiStatus === 'pendiente' ? C.blueBorder : uiStatus === 'pending' ? C.orange : uiStatus === 'active' ? C.blueBorder : C.gray,
+          borderRadius: DT?.borderRadius?.badge ?? 6,
+        }]}>
+          <Text style={[s.badgeTxt, { fontSize: fs.badge || 11, color: uiStatus === 'pendiente' ? C.blue : uiStatus === 'pending' ? C.orange : uiStatus === 'active' ? C.blue : C.gray }]}>
+            {badgeLabel}
+          </Text>
+        </View>
+        {esUrgente && (
+          <View style={{ backgroundColor: '#FDEDEC', borderRadius: 4, paddingHorizontal: 6, paddingVertical: 2, marginLeft: 4 }}>
+            <Text style={{ color: '#E74C3C', fontSize: fs.micro || 9, fontWeight: '800' }}>🚨 {UL.badgeUrgente || 'URGENTE'}</Text>
+          </View>
+        )}
+      </View>
+
+      {item.referencia?.nombreComercial && (
+        <Text style={[s.tcRef, { fontSize: fs.caption || 12 }]}>📍 {item.referencia.nombreComercial}</Text>
+      )}
+
+      <Text style={[s.tcType, { fontSize: fs.body || 14 }]}>{item.tipoMuestra || item.tipo || item.referencia?.nombreComercial || 'Muestra'}</Text>
+      <Text style={[s.tcAddr, { fontSize: fs.small || 10 }]}>{item.referencia?.direccion ?? ''}</Text>
+      {item.referencia?.telefono && (
+        <Text style={[s.tcPhone, { fontSize: fs.micro || 9 }]}>📞 {item.referencia.telefono}</Text>
+      )}
+
+      {(screen.showTimeLimit !== false) && item.horaLimite && !isDone && (
+        <View style={[s.ttime, new Date(item.horaLimite) < new Date() && s.ttimeUrgent]}>
+          <Text style={[s.ttimeTxt, new Date(item.horaLimite) < new Date() && { color: C.red }, { fontSize: fs.micro || 9 }]}>
+            ⏰ Límite: {new Date(item.horaLimite).toLocaleTimeString('es-PE', { hour:'2-digit', minute:'2-digit' })}
+          </Text>
+        </View>
+      )}
+
+      {(screen.showNotas !== false) && item.notas && !isDone && (
+        <Text style={[s.notas, { fontSize: fs.small || 10 }]}>📝 {item.notas}</Text>
+      )}
+
+      {!isDone && btnLabel && (
+        <TouchableOpacity
+          style={[s.abtn, { backgroundColor: btnColor, padding: sp.buttonPadding || 10, minHeight: DT?.layout?.buttonMinHeight ?? 48, borderRadius: DT?.borderRadius?.button ?? 8 }, cargando && { opacity: 0.6 }]}
+          onPress={() => onAvanzar(item)}
+          disabled={cargando}
+          activeOpacity={0.82}
+        >
+          <Text style={[s.abtnTxt, { fontSize: fs.body || 14 }]} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.7}>{cargando ? (UL.btnCargando || 'Actualizando...') : btnLabel}</Text>
+        </TouchableOpacity>
+      )}
+
+      {isDone && (
+        <Text style={[s.doneTag, { fontSize: fs.small || 10 }]}>✅ {badgeLabel}</Text>
+      )}
+    </View>
+  );
+});
+
 export default function TicketsScreen() {
   const user = useAuthStore((s) => s.user);
   const clearUser = useAuthStore((s) => s.clearUser);
@@ -39,11 +162,11 @@ export default function TicketsScreen() {
   const [refreshing, setRefreshing] = useState(false);
   const [turnoActivo, setTurnoActivo] = useState(false);
   const [loadingId, setLoadingId] = useState<string | null>(null);
-  const [estadoMoto, setEstadoMoto] = useState<string>('DISPONIBLE');
+  const [estadoMoto, setEstadoMoto] = useState<string>('OFF_LINE');
 
   // Modales
   const [estadoModal, setEstadoModal] = useState(false);
-  const [estadoSel, setEstadoSel] = useState<string>('DISPONIBLE');
+  const [estadoSel, setEstadoSel] = useState<string>('OFF_LINE');
   const [registroModal, setRegistroModal] = useState(false);
   const [confirmModal, setConfirmModal] = useState(false);
 
@@ -90,16 +213,30 @@ export default function TicketsScreen() {
     fetchConfig();
     const initSocket = async () => {
       const socket = await getSocket();
-      socket.off('ticket:new', cargarTickets);
-      socket.off('ticket:update', cargarTickets);
-      socket.on('ticket:new', cargarTickets);
-      socket.on('ticket:update', cargarTickets);
+      socket.off('ticket:new');
+      socket.off('ticket:update');
+
+      socket.on('ticket:new', async (data: { ticketId: string }) => {
+        try {
+          const { data: t } = await api.get(`/tickets/${data.ticketId}`);
+          setTickets(prev => {
+            if (prev.some(x => x.id === t.id)) return prev;
+            return [t, ...prev];
+          });
+        } catch {}
+      });
+
+      socket.on('ticket:update', (data: { ticketId: string; estado: EstadoTicket; motorizadoNombre?: string; timestamp?: string }) => {
+        setTickets(prev =>
+          prev.map(t => t.id === data.ticketId ? { ...t, estado: data.estado } : t)
+        );
+      });
     };
     initSocket();
     return () => {
-      getSocket().then((s) => {
-        s.off('ticket:new', cargarTickets);
-        s.off('ticket:update', cargarTickets);
+      getSocket().then(s => {
+        s.off('ticket:new');
+        s.off('ticket:update');
       });
     };
   }, []);
@@ -110,8 +247,16 @@ export default function TicketsScreen() {
     setRefreshing(false);
   };
 
+  useEffect(() => {
+    const hasActive = tickets.some(t => CLIENT_FLOW_MAP[t.estado] !== undefined);
+    if (hasActive) {
+      activateKeepAwakeAsync();
+    } else {
+      deactivateKeepAwake();
+    }
+  }, [tickets]);
+
   const iniciarTurno = async () => {
-    await activateKeepAwakeAsync();
     await startTracking();
     setTurnoActivo(true);
     setEstadoMoto('DISPONIBLE');
@@ -141,92 +286,57 @@ export default function TicketsScreen() {
 
   // Avanzar estado de ticket
   const avanzarEstado = async (ticket: Ticket) => {
-    const tf = config?.ticketFlow || {};
-    const uiStatus = tf[ticket.estado] || 'done';
-    if (uiStatus === 'done') return;
+    const flow = CLIENT_FLOW_MAP[ticket.estado];
+    if (!flow) return; // RECOGIDO, ENTREGADO, CERRADO, etc. — sin botón
 
-    try {
-      const flowRes = await api.get(`/tickets/${ticket.id}/flow`);
-      const flow = flowRes.data;
-      const btn = flow.boton;
-
-      if (!btn) return;
-
-      if (btn.accion === 'tomarTicket') {
-        setLoadingId(ticket.id);
-        try {
-          await ticketsApi.tomarTicket(ticket.id);
-          if (!turnoActivo) await iniciarTurno();
-          await cargarTickets();
-        } catch (e: any) {
-          const msg = e.response?.data?.message;
-          log('ERROR', 'avanzarEstado', `tomarTicket: ${e?.response?.data ? JSON.stringify(e.response.data) : e?.message || 'unknown'}`);
-          Alert.alert('Error', Array.isArray(msg) ? msg[0] : msg ?? 'No se pudo tomar el pedido');
-        } finally { setLoadingId(null); }
-        return;
-      }
-
-      if (btn.abreModal) {
-        if (ticket.estado === 'EN_RUTA' && btn.body) {
-          await api.post(btn.endpoint!, btn.body);
-        }
-        currentTicketId.current = ticket.id;
-        resetRegistroForm();
-        setRegistroModal(true);
-        return;
-      }
-
+    if (flow.accion === 'tomarTicket') {
       setLoadingId(ticket.id);
+      const prevTickets = tickets;
+      setTickets(prev => prev.map(t => t.id === ticket.id ? { ...t, estado: 'ASIGNADO' as EstadoTicket } : t));
       try {
-        await (btn.body
-          ? api.post(btn.endpoint!, btn.body)
-          : api.post(btn.endpoint!));
+        const res = await ticketsApi.tomarTicket(ticket.id);
+        setTickets(prev => prev.map(t => t.id === ticket.id ? (res ?? { ...t, estado: 'ASIGNADO' as EstadoTicket }) : t));
         if (!turnoActivo) await iniciarTurno();
-        await cargarTickets();
       } catch (e: any) {
+        setTickets(prevTickets); // revertir
         const msg = e.response?.data?.message;
-        log('ERROR', 'avanzarEstado', `${btn.accion}: ${e?.response?.data ? JSON.stringify(e.response.data) : e?.message || 'unknown'}`);
-        Alert.alert('Error', Array.isArray(msg) ? msg[0] : msg ?? 'Error al actualizar');
+        log('ERROR', 'avanzarEstado', `tomarTicket: ${e?.response?.data ? JSON.stringify(e.response.data) : e?.message || 'unknown'}`);
+        Alert.alert('Error', Array.isArray(msg) ? msg[0] : msg ?? 'No se pudo tomar el pedido');
       } finally { setLoadingId(null); }
-    } catch (e: any) {
-      log('WARN', 'avanzarEstado', `Flow API error, using fallback: ${e?.message}`);
-      if (uiStatus === 'active') {
-        setLoadingId(ticket.id);
-        try {
-          if (ticket.estado === 'EN_RUTA') {
-            await ticketsApi.updateEstado(ticket.id, 'EN_RECOJO');
-          }
-          currentTicketId.current = ticket.id;
-          resetRegistroForm();
-          setRegistroModal(true);
-        } catch (err: any) {
-          const msg = err.response?.data?.message;
-          Alert.alert('Error', Array.isArray(msg) ? msg[0] : msg ?? 'Error al actualizar');
-        } finally { setLoadingId(null); }
-        return;
-      }
-      if (uiStatus === 'pendiente') {
-        setLoadingId(ticket.id);
-        try {
-          await ticketsApi.tomarTicket(ticket.id);
-          if (!turnoActivo) await iniciarTurno();
-          await cargarTickets();
-        } catch (err: any) {
-          const msg = err.response?.data?.message;
-          Alert.alert('Error', Array.isArray(msg) ? msg[0] : msg ?? 'No se pudo tomar el pedido');
-        } finally { setLoadingId(null); }
-        return;
-      }
-      setLoadingId(ticket.id);
-      try {
-        await ticketsApi.updateEstado(ticket.id, 'EN_RUTA');
-        if (!turnoActivo) await iniciarTurno();
-        await cargarTickets();
-      } catch (err: any) {
-        const msg = err.response?.data?.message;
-        Alert.alert('Error', Array.isArray(msg) ? msg[0] : msg ?? 'No se pudo actualizar');
-      } finally { setLoadingId(null); }
+      return;
     }
+
+    if (flow.abreModal) {
+      if (ticket.estado === 'EN_RUTA' && flow.endpoint) {
+        const prevTickets = tickets;
+        setTickets(prev => prev.map(t => t.id === ticket.id ? { ...t, estado: 'EN_RECOJO' as EstadoTicket } : t));
+        try {
+          const res = await api.post(flow.endpoint(ticket.id), flow.body);
+          setTickets(prev => prev.map(t => t.id === ticket.id ? (res.data ?? { ...t, estado: 'EN_RECOJO' as EstadoTicket }) : t));
+        } catch (e: any) {
+          setTickets(prevTickets);
+        }
+      }
+      currentTicketId.current = ticket.id;
+      resetRegistroForm();
+      setRegistroModal(true);
+      return;
+    }
+
+    setLoadingId(ticket.id);
+    const nextEstado = flow.body?.estado as EstadoTicket;
+    const prevTickets = tickets;
+    setTickets(prev => prev.map(t => t.id === ticket.id ? { ...t, estado: nextEstado } : t));
+    try {
+      const res = await api.post(flow.endpoint!(ticket.id), flow.body);
+      setTickets(prev => prev.map(t => t.id === ticket.id ? (res.data ?? { ...t, estado: nextEstado }) : t));
+      if (!turnoActivo) await iniciarTurno();
+    } catch (e: any) {
+      setTickets(prevTickets); // revertir
+      const msg = e.response?.data?.message;
+      log('ERROR', 'avanzarEstado', `${flow.accion}: ${e?.response?.data ? JSON.stringify(e.response.data) : e?.message || 'unknown'}`);
+      Alert.alert('Error', Array.isArray(msg) ? msg[0] : msg ?? 'Error al actualizar');
+    } finally { setLoadingId(null); }
   };
 
   const resetRegistroForm = () => {
@@ -304,7 +414,7 @@ export default function TicketsScreen() {
 
     try {
       await ticketsApi.updateEstado(id, 'RECOGIDO');
-      await cargarTickets();
+      setTickets(prev => prev.map(t => t.id === id ? { ...t, estado: 'RECOGIDO' as EstadoTicket } : t));
       if (sinInfo) {
         Alert.alert('✅ Recojo completado', 'El registro se guardó sin información adicional.');
       } else if (fotoUri || refNombre || observaciones || (metodoPago && metodoPago !== 'SIN_PAGO')) {
@@ -355,108 +465,6 @@ export default function TicketsScreen() {
   const completados = tickets.filter(t => (tf[t.estado] || 'done') === 'done');
 
   const eActual = config?.estadosMoto?.[estadoMoto] || {};
-
-  const renderTicket = ({ item }: { item: Ticket }) => {
-    const tf2 = config?.ticketFlow || {};
-    const uiStatus = tf2[item.estado] || 'done';
-    const isDone = uiStatus === 'done';
-    const borderColor = uiStatus === 'pendiente' ? C.blue : uiStatus === 'pending' ? C.orange : uiStatus === 'active' ? C.blue : C.green;
-
-    // ─── Labels desde config (SDUI) — por estado REAL no por uiStatus ───
-    const estadoLabels: Record<string, string> = {
-      PENDIENTE: UL.badgePendiente || '📋 PENDIENTE',
-      ASIGNADO: UL.badgeAsignado || '🔄 ASIGNADO',
-      EN_RUTA: UL.badgeEnRuta || '🏍️ EN RUTA',
-      EN_RECOJO: UL.badgeEnRecojo || UL.badgeEnRuta || '🏍️ EN RUTA',
-      RECOGIDO: UL.badgeRecogido || '🔵 RECOGIDO',
-      EN_LABORATORIO: UL.badgeEnLaboratorio || '🧪 EN LAB',
-      ENTREGADO: UL.badgeEntregado || '✅ ENTREGADO',
-      CERRADO: UL.badgeCerrado || '🔒 CERRADO',
-      CANCELADO: UL.badgeCancelado || '❌ CANCELADO',
-      FALLIDO: UL.badgeFallido || '⚠️ FALLIDO',
-    };
-    const badgeLabel = estadoLabels[item.estado] || item.estado;
-    const btnLabels: Record<string, string> = {
-      pendiente: UL.btnTomarPedido || '📋 Tomar pedido',
-      pending: UL.btnVoyAhora || '🏍️ Voy ahora',
-      active: UL.btnYaRecogi || '🧪 Ya recogí',
-    };
-    const btnColors: Record<string, string> = {
-      pendiente: C.blue,
-      pending: C.orange,
-      active: C.blue,
-    };
-    // ─── Botón dinámico desde VPS (SDUI) ───
-    // Usa flowButtons[estado] del config, si no existe cae al btnLabels estático
-    const fb = config?.flowButtons?.[item.estado];
-    const btnLabel = fb?.label || btnLabels[uiStatus];
-    const btnColor = fb?.color || btnColors[uiStatus];
-    const cargando = loadingId === item.id;
-
-    // ─── Design tokens (SDUI) ───
-    const fs = DT?.fontSizes || {};
-    const sp = DT?.spacing || {};
-    const esUrgente = item.tipo === 'URGENTE';
-
-    return (
-      <View style={[s.tcard, { borderLeftColor: esUrgente ? '#E74C3C' : borderColor, borderLeftWidth: esUrgente ? 6 : 4, padding: sp.cardPadding || 13, borderRadius: (DT?.borderRadius?.card ?? 12) }, (uiStatus === 'active' || uiStatus === 'pendiente') && s.tcardActive]}>
-        <View style={s.tcTop}>
-          <Text style={[s.tcId, { fontSize: fs.micro || 9 }]}>#{item.id.slice(-6).toUpperCase()}</Text>
-          <View style={[s.badge, {
-            backgroundColor: uiStatus === 'pendiente' ? C.blueLight : uiStatus === 'pending' ? C.orangeLight : uiStatus === 'active' ? C.blueLight : C.grayLight,
-            borderColor: uiStatus === 'pendiente' ? C.blueBorder : uiStatus === 'pending' ? C.orange : uiStatus === 'active' ? C.blueBorder : C.gray,
-            borderRadius: DT?.borderRadius?.badge ?? 6,
-          }]}>
-            <Text style={[s.badgeTxt, { fontSize: fs.badge || 11, color: uiStatus === 'pendiente' ? C.blue : uiStatus === 'pending' ? C.orange : uiStatus === 'active' ? C.blue : C.gray }]}>
-              {badgeLabel}
-            </Text>
-          </View>
-          {esUrgente && (
-            <View style={{ backgroundColor: '#FDEDEC', borderRadius: 4, paddingHorizontal: 6, paddingVertical: 2, marginLeft: 4 }}>
-              <Text style={{ color: '#E74C3C', fontSize: fs.micro || 9, fontWeight: '800' }}>🚨 {UL.badgeUrgente || 'URGENTE'}</Text>
-            </View>
-          )}
-        </View>
-
-        {item.referencia?.nombre && (
-          <Text style={[s.tcRef, { fontSize: fs.caption || 12 }]}>📍 {item.referencia.nombre}</Text>
-        )}
-
-        <Text style={[s.tcType, { fontSize: fs.body || 14 }]}>{item.tipoMuestra || item.tipo || item.referencia?.nombre || 'Muestra'}</Text>
-        <Text style={[s.tcAddr, { fontSize: fs.small || 10 }]}>{item.referencia?.direccion ?? ''}</Text>
-        {item.referencia?.telefono && (
-          <Text style={[s.tcPhone, { fontSize: fs.micro || 9 }]}>📞 {item.referencia.telefono}</Text>
-        )}
-
-        {(screen.showTimeLimit !== false) && item.horaLimite && !isDone && (
-          <View style={[s.ttime, new Date(item.horaLimite) < new Date() && s.ttimeUrgent]}>
-            <Text style={[s.ttimeTxt, new Date(item.horaLimite) < new Date() && { color: C.red }, { fontSize: fs.micro || 9 }]}>
-              ⏰ Límite: {new Date(item.horaLimite).toLocaleTimeString('es-PE', { hour:'2-digit', minute:'2-digit' })}
-            </Text>
-          </View>
-        )}
-
-        {(screen.showNotas !== false) && item.notas && !isDone && (
-          <Text style={[s.notas, { fontSize: fs.small || 10 }]}>📝 {item.notas}</Text>
-        )}
-
-        {!isDone && btnLabel && (
-          <TouchableOpacity
-            style={[s.abtn, { backgroundColor: btnColor, padding: sp.buttonPadding || 10, minHeight: DT?.layout?.buttonMinHeight ?? 48, borderRadius: DT?.borderRadius?.button ?? 8 }, cargando && { opacity: 0.6 }]}
-            onPress={() => avanzarEstado(item)}
-            disabled={cargando}
-            activeOpacity={0.82}
-          >
-            <Text style={[s.abtnTxt, { fontSize: fs.body || 14 }]} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.7}>{cargando ? (UL.btnCargando || 'Actualizando...') : btnLabel}</Text>
-          </TouchableOpacity>
-        )}
-
-        {isDone && (
-          <Text style={[s.doneTag, { fontSize: fs.small || 10 }]}>✅ {badgeLabel}</Text>
-        )}
-      </View>
-    );
-  };
 
   // ─── Secciones dinámicas desde SDUI ───
   const listaCompleta = [
@@ -540,7 +548,7 @@ export default function TicketsScreen() {
         renderItem={({ item }) =>
           item._sep
             ? <Text style={[s.sep, { color: item._color, fontSize: DT?.fontSizes?.micro || 9 }]}>{item._sep}</Text>
-            : renderTicket({ item })
+            : <TicketCard item={item} config={config} loadingId={loadingId} onAvanzar={avanzarEstado} />
         }
         contentContainerStyle={s.list}
         refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={C.blue} />}
@@ -552,6 +560,9 @@ export default function TicketsScreen() {
           </View>
         }
         ItemSeparatorComponent={() => <View style={{ height: DT?.spacing?.cardGap || 10 }} />}
+        removeClippedSubviews={true}
+        maxToRenderPerBatch={8}
+        windowSize={5}
       />
 
       {/* ══ MODAL ESTADO MOTO ══ */}

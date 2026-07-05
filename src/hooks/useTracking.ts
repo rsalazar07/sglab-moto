@@ -37,7 +37,8 @@ TaskManager.defineTask(GPS_TASK, async ({ data, error }: any) => {
 BackgroundFetch.defineTask(BG_FETCH_TASK, async () => {
   try {
     const loc = await Location.getCurrentPositionAsync({
-      accuracy: Location.Accuracy.High,
+      accuracy: Location.Accuracy.Low,
+      maximumAge: 30000,
     });
     const payload = {
       latitud: loc.coords.latitude,
@@ -87,7 +88,7 @@ export const useTracking = () => {
     interval.current = setInterval(async () => {
       try {
         const loc = await Location.getCurrentPositionAsync({
-          accuracy: Location.Accuracy.High,
+          accuracy: Location.Accuracy.Balanced,
         });
         const payload = {
           latitud: loc.coords.latitude,
@@ -108,9 +109,9 @@ export const useTracking = () => {
       const isRunning = await Location.hasStartedLocationUpdatesAsync(GPS_TASK);
       if (!isRunning) {
         await Location.startLocationUpdatesAsync(GPS_TASK, {
-          accuracy: Location.Accuracy.High,
-          timeInterval: INTERVAL_MS,
-          distanceInterval: 10,
+          accuracy: Location.Accuracy.Balanced,
+          timeInterval: 10000,
+          distanceInterval: 20,
           showsBackgroundLocationIndicator: true,
           foregroundService: {
             notificationTitle: '🏍️ SGLab Moto activo',
@@ -146,36 +147,16 @@ export const useTracking = () => {
 
       active.current = true;
 
-      // 4. Foreground polling — envía puntos via WebSocket + REST fallback
-      interval.current = setInterval(async () => {
-        try {
-          const loc = await Location.getCurrentPositionAsync({
-            accuracy: Location.Accuracy.High,
-          });
-          const payload = {
-            latitud: loc.coords.latitude,
-            longitud: loc.coords.longitude,
-            velocidad: loc.coords.speed ?? 0,
-          };
-          try {
-            const socket = await getSocket();
-            socket.emit('tracking:point', payload);
-          } catch {
-            await api.post('/tracking/point', payload);
-          }
-        } catch {}
-      }, INTERVAL_MS);
-
-      // 5. Background task (GPS continuo en segundo plano)
+      // 4. Background task (GPS continuo en segundo plano — cubre foreground y background)
       const bg = await Location.requestBackgroundPermissionsAsync();
       if (bg.status === 'granted') {
         const isRunning = await Location.hasStartedLocationUpdatesAsync(GPS_TASK);
         if (isRunning) await Location.stopLocationUpdatesAsync(GPS_TASK);
 
         await Location.startLocationUpdatesAsync(GPS_TASK, {
-          accuracy: Location.Accuracy.High,
-          timeInterval: INTERVAL_MS,
-          distanceInterval: 10,
+          accuracy: Location.Accuracy.Balanced,
+          timeInterval: 10000,
+          distanceInterval: 20,
           showsBackgroundLocationIndicator: true,
           foregroundService: {
             notificationTitle: '🏍️ SGLab Moto activo',
@@ -187,7 +168,7 @@ export const useTracking = () => {
         });
       }
 
-      // 6. Background Fetch — salvavidas para fabricantes agresivos
+      // 5. Background Fetch — salvavidas para fabricantes agresivos
       try {
         const status = await BackgroundFetch.getStatusAsync();
         if (status === BackgroundFetch.BackgroundFetchStatus.Denied) {
