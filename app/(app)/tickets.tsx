@@ -173,6 +173,7 @@ export default function TicketsScreen() {
   const [refNombre, setRefNombre] = useState('');
   const [observaciones, setObservaciones] = useState('');
   const [fotoUri, setFotoUri] = useState<string | null>(null);
+  const [fotoBase64, setFotoBase64] = useState<string | undefined>(undefined);
   const [metodoPago, setMetodoPago] = useState<MetodoPago | null>(null);
   const [monto, setMonto] = useState('');
   const [subiendo, setSubiendo] = useState(false);
@@ -352,6 +353,7 @@ export default function TicketsScreen() {
     setRefNombre('');
     setObservaciones('');
     setFotoUri(null);
+    setFotoBase64(undefined);
     setMetodoPago(null);
     setMonto('');
   };
@@ -381,17 +383,8 @@ export default function TicketsScreen() {
     if (!id) return;
     setSubiendo(true);
 
-    let fotoUrl: string | undefined;
-    if (fotoUri) {
-      try {
-        const result = await ticketsApi.subirEvidencia(id, fotoUri);
-        fotoUrl = result.url;
-      } catch (e) {
-        console.error('[completarRecojo] Error subiendo foto:', e);
-        log('ERROR', 'completarRecojo', `subirEvidencia: ${e instanceof Error ? e.message : String(e)}`);
-        Alert.alert('Advertencia', 'No se pudo subir la foto. Se guardará el registro sin imagen.');
-      }
-    }
+    // fotoBase64 ya viene del state (cargado por ImagePicker con base64:true)
+    // No necesita FileSystem.readAsStringAsync — el picker resuelve content:// URIs internamente
 
     if (metodoPago && metodoPago !== 'SIN_PAGO' && monto) {
       try {
@@ -415,7 +408,7 @@ export default function TicketsScreen() {
     } else if (refNombre || observaciones || fotoUri) {
       try {
         const body: any = { refNombre, observaciones };
-        if (fotoUrl) body.fotoUrl = fotoUrl;
+        if (fotoBase64) body.fotoBase64 = fotoBase64;
         await ticketsApi.guardarRegistro(id, body);
       } catch (e) {
         console.error('[completarRecojo] Error guardando registro:', e);
@@ -452,8 +445,15 @@ export default function TicketsScreen() {
     const result = await ImagePicker.launchCameraAsync({
       quality: 0.7,
       allowsEditing: false,
+      base64: true,
     });
-    if (!result.canceled) setFotoUri(result.assets[0].uri);
+    if (!result.canceled) {
+      setFotoUri(result.assets[0].uri);
+      // Guardar base64 directamente (ImagePicker resuelve content:// URIs internamente)
+      if (result.assets[0].base64) {
+        setFotoBase64(result.assets[0].base64);
+      }
+    }
   };
 
   const confirmarEstadoMoto = async () => {
