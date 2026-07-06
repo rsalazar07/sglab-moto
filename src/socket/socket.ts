@@ -32,7 +32,7 @@ export const getSocket = async (onSessionRevoked?: () => void): Promise<Socket> 
     Alert.alert(
       'Sesión cerrada',
       data?.message ?? 'Tu sesión fue iniciada en otro dispositivo.',
-      [{ text: 'Entendido', onPress: () => router.replace('/login') }]
+      [{ text: 'Entendido', onPress: () => { (router as any).dismissAll?.(); setTimeout(() => router.replace('/'), 100); } }]
     );
     if (onSessionRevoked) onSessionRevoked();
   });

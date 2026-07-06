@@ -97,7 +97,7 @@ const TicketCard = memo(({ item, config, loadingId, onAvanzar }: {
   return (
     <View style={[s.tcard, { borderLeftColor: esUrgente ? '#E74C3C' : borderColor, borderLeftWidth: esUrgente ? 6 : 4, padding: sp.cardPadding || 13, borderRadius: (DT?.borderRadius?.card ?? 12) }, (uiStatus === 'active' || uiStatus === 'pendiente') && s.tcardActive]}>
       <View style={s.tcTop}>
-        <Text style={[s.tcId, { fontSize: fs.micro || 9 }]}>#{item.id.slice(-6).toUpperCase()}</Text>
+        <Text style={[s.tcId, { fontSize: fs.micro || 9 }]}>🕐 {new Date(item.createdAt).toLocaleTimeString('es-PE', { hour:'2-digit', minute:'2-digit' })}</Text>
         <View style={[s.badge, {
           backgroundColor: uiStatus === 'pendiente' ? C.blueLight : uiStatus === 'pending' ? C.orangeLight : uiStatus === 'active' ? C.blueLight : C.grayLight,
           borderColor: uiStatus === 'pendiente' ? C.blueBorder : uiStatus === 'pending' ? C.orange : uiStatus === 'active' ? C.blueBorder : C.gray,
@@ -278,8 +278,7 @@ export default function TicketsScreen() {
         if (turnoActivo) await finalizarTurno();
         disconnectSocket();
         await authApi.logout();
-        clearUser();
-        router.replace('/login');
+        clearUser(); // (app)/_layout.tsx detecta isAuthenticated=false y redirige a /login
       }},
     ]);
   };
@@ -406,7 +405,9 @@ export default function TicketsScreen() {
       }
     } else if (refNombre || observaciones || fotoUri) {
       try {
-        await ticketsApi.guardarRegistro(id, { refNombre, observaciones, fotoBase64 });
+        const body: any = { refNombre, observaciones };
+        if (fotoBase64) body.fotoBase64 = fotoBase64;
+        await ticketsApi.guardarRegistro(id, body);
       } catch (e) {
         console.error('[completarRecojo] Error guardando registro:', e);
         log('ERROR', 'completarRecojo', `guardarRegistro: ${e instanceof Error ? e.message : String(e)}`);
@@ -463,7 +464,8 @@ export default function TicketsScreen() {
   const activos = tickets.filter(t => (tf[t.estado] || 'done') === 'active');
   const asignados = tickets.filter(t => (tf[t.estado] || 'done') === 'pending');
   const pendientes = tickets.filter(t => (tf[t.estado] || 'done') === 'pendiente');
-  const completados = tickets.filter(t => (tf[t.estado] || 'done') === 'done');
+  const hoy = new Date().toDateString();
+  const completados = tickets.filter(t => (tf[t.estado] || 'done') === 'done' && new Date(t.createdAt).toDateString() === hoy);
 
   const eActual = config?.estadosMoto?.[estadoMoto] || {};
 
@@ -561,7 +563,7 @@ export default function TicketsScreen() {
           </View>
         }
         ItemSeparatorComponent={() => <View style={{ height: DT?.spacing?.cardGap || 10 }} />}
-        removeClippedSubviews={true}
+        removeClippedSubviews={false}
         maxToRenderPerBatch={8}
         windowSize={5}
       />

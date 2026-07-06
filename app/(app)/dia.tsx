@@ -1,7 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, Alert, ScrollView } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { router } from 'expo-router';
 import { useAuthStore } from '../../src/store/authStore';
 import { authApi } from '../../src/api/auth';
 import { ticketsApi } from '../../src/api/tickets';
@@ -79,8 +78,7 @@ export default function DiaScreen() {
         disconnectSocket();
         try { await api.patch('/motorizados/me/estado', { estado: 'OFFLINE' }); } catch (e) { log('WARN', 'dia', 'Error estado OFFLOAD: ' + String(e)); }
         await authApi.logout();
-        clearUser();
-        router.replace('/login');
+        clearUser(); // (app)/_layout.tsx detecta isAuthenticated=false y redirige a /login
       }},
     ]);
   };

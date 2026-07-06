@@ -1,4 +1,4 @@
-import { Stack } from 'expo-router';
+import { Stack, router } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import { Component, useEffect, useState } from 'react';
 import { View, Text, ActivityIndicator, TouchableOpacity } from 'react-native';
@@ -66,6 +66,7 @@ class ErrorBoundary extends Component<{children: any}, {hasError: boolean; error
 // ═══ LAYOUT PRINCIPAL ═══
 export default function RootLayout() {
   const { setUser } = useAuthStore();
+  const isAuthenticated = useAuthStore((s) => s.isAuthenticated);
   const [loading, setLoading] = useState(true);
   const [d, setD] = useState<any>({});
 
@@ -91,6 +92,12 @@ export default function RootLayout() {
       }
     })();
   }, []);
+
+  useEffect(() => {
+    if (!loading && !isAuthenticated) {
+      router.replace('/login');
+    }
+  }, [isAuthenticated, loading]);
 
   if (loading) {
     return (

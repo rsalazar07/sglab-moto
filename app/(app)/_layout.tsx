@@ -1,7 +1,17 @@
-import { Tabs } from 'expo-router';
-import { Text, View } from 'react-native';
+import { Tabs, router } from 'expo-router';
+import { Text } from 'react-native';
+import { useEffect } from 'react';
+import { useAuthStore } from '../../src/store/authStore';
 
 export default function AppLayout() {
+  const isAuthenticated = useAuthStore((s) => s.isAuthenticated);
+
+  useEffect(() => {
+    if (!isAuthenticated) {
+      router.replace('/login');
+    }
+  }, [isAuthenticated]);
+
   return (
     <Tabs
       screenOptions={{
