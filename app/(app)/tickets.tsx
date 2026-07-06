@@ -381,6 +381,7 @@ export default function TicketsScreen() {
       } catch (e) {
         console.error('[completarRecojo] Error leyendo foto:', e);
         log('ERROR', 'completarRecojo', `leerFoto: ${e instanceof Error ? e.message : String(e)}`);
+        Alert.alert('Advertencia', 'No se pudo leer la foto. Se guardará el registro sin imagen.');
       }
     }
 
@@ -403,7 +404,7 @@ export default function TicketsScreen() {
         console.error('[completarRecojo] Error guardando registro vacío:', e);
         log('ERROR', 'completarRecojo', `guardarRegistro(sinInfo): ${e instanceof Error ? e.message : String(e)}`);
       }
-    } else if (refNombre || observaciones || fotoBase64) {
+    } else if (refNombre || observaciones || fotoUri) {
       try {
         await ticketsApi.guardarRegistro(id, { refNombre, observaciones, fotoBase64 });
       } catch (e) {
