@@ -277,8 +277,8 @@ export default function TicketsScreen() {
       { text: 'Salir', style: 'destructive', onPress: async () => {
         if (turnoActivo) await finalizarTurno();
         disconnectSocket();
-        await authApi.logout();
-        clearUser(); // (app)/_layout.tsx detecta isAuthenticated=false y redirige a /login
+        try { await authApi.logout(); } catch (e) { log('ERROR', 'logout', String(e)); }
+        clearUser();
       }},
     ]);
   };

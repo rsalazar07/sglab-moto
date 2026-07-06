@@ -77,8 +77,8 @@ export default function DiaScreen() {
         deactivateKeepAwake();
         disconnectSocket();
         try { await api.patch('/motorizados/me/estado', { estado: 'OFFLINE' }); } catch (e) { log('WARN', 'dia', 'Error estado OFFLOAD: ' + String(e)); }
-        await authApi.logout();
-        clearUser(); // (app)/_layout.tsx detecta isAuthenticated=false y redirige a /login
+        try { await authApi.logout(); } catch (e) { log('WARN', 'logout', String(e)); }
+        clearUser();
       }},
     ]);
   };
