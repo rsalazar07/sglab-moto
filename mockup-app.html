@@ -1,0 +1,953 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>SGLab Motorizado — Mockup</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    background: #1a1a2e;
+    min-height: 100vh;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+    padding: 20px;
+  }
+
+  /* Wrapper tipo celular */
+  .phone-frame {
+    width: 390px;
+    height: 844px;
+    background: #f0f4f8;
+    border-radius: 44px;
+    box-shadow:
+      0 0 0 10px #111,
+      0 0 0 12px #333,
+      0 30px 80px rgba(0,0,0,0.6);
+    overflow: hidden;
+    display: flex;
+    flex-direction: column;
+    position: relative;
+  }
+
+  /* Status bar */
+  .status-bar {
+    background: #0f1b6b;
+    padding: 12px 24px 4px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    flex-shrink: 0;
+  }
+  .status-bar .time { color: #fff; font-size: 15px; font-weight: 700; letter-spacing: 0.5px; }
+  .status-icons { display: flex; gap: 6px; align-items: center; }
+  .status-icons span { color: #fff; font-size: 12px; }
+
+  /* Header principal */
+  .header {
+    background: linear-gradient(135deg, #1a2f9b 0%, #0f1b6b 100%);
+    padding: 14px 18px 16px;
+    flex-shrink: 0;
+  }
+  .header-top {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 12px;
+  }
+  .moto-info { display: flex; align-items: center; gap: 10px; }
+  .avatar {
+    width: 42px; height: 42px; border-radius: 21px;
+    background: linear-gradient(135deg, #4a9eff, #1a6fcc);
+    display: flex; align-items: center; justify-content: center;
+    color: #fff; font-size: 17px; font-weight: 700;
+    border: 2px solid rgba(255,255,255,0.3);
+  }
+  .moto-name { color: #fff; font-size: 15px; font-weight: 700; letter-spacing: 0.2px; }
+  .moto-sub { color: rgba(255,255,255,0.6); font-size: 11px; margin-top: 1px; }
+
+  /* Botones header */
+  .header-actions { display: flex; gap: 8px; }
+  .btn-icon {
+    width: 36px; height: 36px; border-radius: 18px;
+    background: rgba(255,255,255,0.12);
+    border: 1px solid rgba(255,255,255,0.2);
+    display: flex; align-items: center; justify-content: center;
+    cursor: pointer; color: #fff; font-size: 16px;
+  }
+  .btn-icon:active { background: rgba(255,255,255,0.22); }
+
+  /* GPS status bar */
+  .gps-bar {
+    background: rgba(255,255,255,0.1);
+    border-radius: 10px;
+    padding: 8px 12px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+  }
+  .gps-pill {
+    display: flex; align-items: center; gap: 6px;
+    background: rgba(52, 211, 153, 0.2);
+    border: 1px solid rgba(52, 211, 153, 0.4);
+    border-radius: 20px; padding: 3px 10px;
+  }
+  .gps-dot {
+    width: 7px; height: 7px; border-radius: 4px;
+    background: #34d399;
+    animation: pulse-gps 1.4s ease-in-out infinite;
+  }
+  @keyframes pulse-gps {
+    0%, 100% { opacity: 1; transform: scale(1); }
+    50% { opacity: 0.5; transform: scale(0.85); }
+  }
+  .gps-txt { color: #34d399; font-size: 11px; font-weight: 600; }
+
+  .estado-pill {
+    display: flex; align-items: center; gap: 5px;
+    background: rgba(99, 179, 237, 0.15);
+    border: 1px solid rgba(99, 179, 237, 0.35);
+    border-radius: 20px; padding: 3px 10px;
+    cursor: pointer;
+  }
+  .estado-txt { color: #90cdf4; font-size: 11px; font-weight: 600; }
+  .estado-chevron { color: #90cdf4; font-size: 9px; }
+
+  /* Stats mini */
+  .stats-row {
+    display: flex; gap: 8px; margin-top: 10px;
+  }
+  .stat-mini {
+    flex: 1; background: rgba(255,255,255,0.1);
+    border-radius: 10px; padding: 8px 10px;
+    text-align: center;
+  }
+  .stat-mini .val { color: #fff; font-size: 18px; font-weight: 800; }
+  .stat-mini .lbl { color: rgba(255,255,255,0.55); font-size: 10px; margin-top: 1px; }
+
+  /* Tabs */
+  .tabs-container {
+    background: #fff;
+    border-bottom: 1px solid #e2e8f0;
+    flex-shrink: 0;
+    padding: 0 16px;
+    display: flex;
+    gap: 0;
+  }
+  .tab-btn {
+    flex: 1; padding: 13px 8px;
+    background: none; border: none;
+    cursor: pointer;
+    display: flex; align-items: center; justify-content: center;
+    gap: 7px;
+    border-bottom: 2.5px solid transparent;
+    transition: all 0.18s;
+    position: relative;
+  }
+  .tab-btn.active { border-bottom-color: #2563eb; }
+  .tab-label { font-size: 13.5px; font-weight: 600; color: #94a3b8; }
+  .tab-btn.active .tab-label { color: #2563eb; }
+  .tab-badge {
+    min-width: 20px; height: 20px; border-radius: 10px;
+    background: #e2e8f0; color: #64748b;
+    font-size: 11px; font-weight: 700;
+    display: flex; align-items: center; justify-content: center;
+    padding: 0 5px;
+  }
+  .tab-btn.active .tab-badge { background: #dbeafe; color: #2563eb; }
+  .tab-badge.urgent { background: #fee2e2; color: #dc2626; }
+  .tab-btn.active .tab-badge.urgent { background: #fca5a5; color: #991b1b; }
+
+  /* Content area */
+  .content {
+    flex: 1;
+    overflow-y: auto;
+    background: #f1f5f9;
+    -webkit-overflow-scrolling: touch;
+  }
+  .content::-webkit-scrollbar { display: none; }
+
+  /* Section header */
+  .section-header {
+    padding: 14px 16px 8px;
+    display: flex; align-items: center; justify-content: space-between;
+  }
+  .section-title {
+    font-size: 12px; font-weight: 700;
+    color: #64748b; letter-spacing: 0.8px;
+    text-transform: uppercase;
+  }
+  .section-count {
+    font-size: 11px; color: #94a3b8; font-weight: 600;
+  }
+
+  /* Ticket card */
+  .ticket-card {
+    margin: 0 12px 10px;
+    background: #fff;
+    border-radius: 16px;
+    box-shadow: 0 1px 4px rgba(0,0,0,0.07), 0 2px 12px rgba(0,0,0,0.05);
+    overflow: hidden;
+    border: 1px solid #e9eef4;
+  }
+  .ticket-card.urgente {
+    border-left: 4px solid #ef4444;
+    border-color: #fee2e2;
+    border-left-color: #ef4444;
+  }
+  .ticket-card.normal {
+    border-left: 4px solid #3b82f6;
+    border-color: #eff6ff;
+    border-left-color: #3b82f6;
+  }
+
+  .card-header {
+    padding: 12px 14px 8px;
+    display: flex; align-items: flex-start; justify-content: space-between;
+    gap: 8px;
+  }
+  .card-left { flex: 1; min-width: 0; }
+
+  .ticket-code { font-size: 11px; color: #94a3b8; font-weight: 600; margin-bottom: 3px; }
+  .ticket-ref {
+    font-size: 14px; font-weight: 700; color: #1e293b;
+    white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  }
+  .ticket-dir {
+    font-size: 12px; color: #64748b; margin-top: 3px;
+    display: flex; align-items: center; gap: 4px;
+    white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  }
+
+  .badge-tipo {
+    flex-shrink: 0;
+    padding: 3px 9px; border-radius: 20px;
+    font-size: 10.5px; font-weight: 700; letter-spacing: 0.3px;
+  }
+  .badge-tipo.urgente { background: #fee2e2; color: #dc2626; }
+  .badge-tipo.normal { background: #dbeafe; color: #1d4ed8; }
+
+  .card-body {
+    padding: 0 14px 10px;
+    display: flex; align-items: center; gap: 8px;
+    flex-wrap: wrap;
+  }
+  .info-chip {
+    display: flex; align-items: center; gap: 4px;
+    background: #f8fafc; border: 1px solid #e2e8f0;
+    border-radius: 8px; padding: 4px 9px;
+  }
+  .info-chip span { font-size: 11px; color: #64748b; font-weight: 500; }
+  .chip-ic { font-size: 12px; }
+
+  .card-footer {
+    padding: 8px 14px 12px;
+    display: flex; align-items: center; justify-content: space-between;
+    border-top: 1px solid #f1f5f9;
+  }
+  .time-limit {
+    display: flex; align-items: center; gap: 5px;
+    font-size: 11px; color: #f59e0b; font-weight: 600;
+  }
+  .time-limit.ok { color: #64748b; }
+  .btn-tomar {
+    padding: 8px 18px; border-radius: 22px;
+    font-size: 13px; font-weight: 700;
+    border: none; cursor: pointer;
+    transition: transform 0.1s, box-shadow 0.1s;
+  }
+  .btn-tomar.urgente {
+    background: linear-gradient(135deg, #ef4444, #dc2626);
+    color: #fff; box-shadow: 0 3px 10px rgba(239,68,68,0.35);
+  }
+  .btn-tomar.normal {
+    background: linear-gradient(135deg, #3b82f6, #2563eb);
+    color: #fff; box-shadow: 0 3px 10px rgba(59,130,246,0.35);
+  }
+  .btn-tomar:active { transform: scale(0.96); }
+
+  /* ---- MI RUTA TAB ---- */
+  .panel { display: none; }
+  .panel.active { display: block; }
+
+  /* En curso card */
+  .ruta-card {
+    margin: 0 12px 10px;
+    background: #fff;
+    border-radius: 16px;
+    box-shadow: 0 1px 4px rgba(0,0,0,0.07), 0 2px 12px rgba(0,0,0,0.05);
+    border: 1px solid #e9eef4;
+    overflow: hidden;
+  }
+  .ruta-card-header {
+    padding: 12px 14px 10px;
+    display: flex; align-items: center; justify-content: space-between;
+  }
+  .ruta-left { flex: 1; min-width: 0; }
+  .ruta-code { font-size: 11px; color: #94a3b8; font-weight: 600; margin-bottom: 2px; }
+  .ruta-ref { font-size: 14px; font-weight: 700; color: #1e293b; }
+  .ruta-dir { font-size: 12px; color: #64748b; margin-top: 2px; display: flex; align-items: center; gap: 3px; }
+
+  /* Estado badge */
+  .estado-badge {
+    flex-shrink: 0;
+    padding: 4px 10px; border-radius: 20px;
+    font-size: 10.5px; font-weight: 700;
+  }
+  .estado-badge.en-ruta { background: #fef3c7; color: #d97706; }
+  .estado-badge.en-recojo { background: #fff7ed; color: #ea580c; }
+  .estado-badge.recogido { background: #d1fae5; color: #065f46; }
+  .estado-badge.en-lab { background: #ede9fe; color: #6d28d9; }
+
+  /* Progress steps */
+  .steps-row {
+    padding: 8px 14px 12px;
+    display: flex; align-items: center; gap: 0;
+  }
+  .step {
+    display: flex; flex-direction: column; align-items: center;
+    flex: 1; position: relative;
+  }
+  .step-dot {
+    width: 20px; height: 20px; border-radius: 10px;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 10px; font-weight: 700; z-index: 1;
+    position: relative;
+  }
+  .step-dot.done { background: #22c55e; color: #fff; }
+  .step-dot.active { background: #f59e0b; color: #fff; box-shadow: 0 0 0 4px rgba(245,158,11,0.2); }
+  .step-dot.pending { background: #e2e8f0; color: #94a3b8; }
+  .step-lbl { font-size: 9px; color: #94a3b8; margin-top: 4px; text-align: center; font-weight: 600; white-space: nowrap; }
+  .step-lbl.done { color: #22c55e; }
+  .step-lbl.active { color: #f59e0b; font-weight: 700; }
+
+  .step-line {
+    height: 2px; flex: 1; margin-top: -24px; position: relative; z-index: 0;
+    align-self: flex-start; margin-top: 9px;
+  }
+  .step-line.done { background: #22c55e; }
+  .step-line.pending { background: #e2e8f0; }
+
+  /* Acción btn en ruta */
+  .ruta-action {
+    padding: 0 14px 14px;
+  }
+  .btn-accion {
+    width: 100%; padding: 11px; border-radius: 12px;
+    font-size: 14px; font-weight: 700; border: none; cursor: pointer;
+    display: flex; align-items: center; justify-content: center; gap: 8px;
+    transition: transform 0.1s;
+  }
+  .btn-accion:active { transform: scale(0.98); }
+  .btn-accion.en-ruta {
+    background: linear-gradient(135deg, #f59e0b, #d97706);
+    color: #fff; box-shadow: 0 3px 10px rgba(245,158,11,0.35);
+  }
+  .btn-accion.en-recojo {
+    background: linear-gradient(135deg, #f97316, #ea580c);
+    color: #fff; box-shadow: 0 3px 10px rgba(249,115,22,0.35);
+  }
+
+  /* Completados section */
+  .completados-header {
+    margin: 0 12px 8px;
+    background: #fff;
+    border-radius: 14px;
+    border: 1px solid #e9eef4;
+    overflow: hidden;
+  }
+  .completados-toggle {
+    padding: 14px 16px;
+    display: flex; align-items: center; justify-content: space-between;
+    cursor: pointer;
+    -webkit-tap-highlight-color: transparent;
+  }
+  .completados-title {
+    display: flex; align-items: center; gap: 8px;
+    font-size: 13px; font-weight: 700; color: #374151;
+  }
+  .completados-badge {
+    background: #d1fae5; color: #065f46;
+    font-size: 11px; font-weight: 700;
+    padding: 2px 8px; border-radius: 10px;
+  }
+  .chevron { font-size: 13px; color: #94a3b8; transition: transform 0.2s; }
+  .chevron.open { transform: rotate(180deg); }
+
+  .completados-list {
+    border-top: 1px solid #f1f5f9;
+    max-height: 0; overflow: hidden;
+    transition: max-height 0.3s ease;
+  }
+  .completados-list.open { max-height: 400px; }
+
+  .completed-item {
+    padding: 12px 16px;
+    display: flex; align-items: center; gap: 10px;
+    border-bottom: 1px solid #f8fafc;
+  }
+  .completed-item:last-child { border-bottom: none; }
+  .check-circle {
+    width: 32px; height: 32px; border-radius: 16px;
+    background: #d1fae5; border: 1px solid #a7f3d0;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 15px; flex-shrink: 0;
+  }
+  .completed-info { flex: 1; min-width: 0; }
+  .completed-ref { font-size: 13px; font-weight: 600; color: #374151; }
+  .completed-meta { font-size: 11px; color: #94a3b8; margin-top: 1px; }
+  .completed-time { font-size: 11px; font-weight: 600; color: #6ee7b7; }
+
+  /* Empty state */
+  .empty-state {
+    padding: 48px 24px;
+    display: flex; flex-direction: column;
+    align-items: center; text-align: center; gap: 10px;
+  }
+  .empty-ic { font-size: 44px; opacity: 0.4; }
+  .empty-title { font-size: 15px; font-weight: 700; color: #374151; }
+  .empty-sub { font-size: 12px; color: #94a3b8; line-height: 1.5; }
+
+  /* Bottom nav */
+  .bottom-nav {
+    background: #fff;
+    border-top: 1px solid #e2e8f0;
+    padding: 8px 0 20px;
+    display: flex;
+    flex-shrink: 0;
+  }
+  .nav-btn {
+    flex: 1; padding: 8px; cursor: pointer;
+    display: flex; flex-direction: column; align-items: center; gap: 3px;
+    background: none; border: none;
+    -webkit-tap-highlight-color: transparent;
+  }
+  .nav-ic { font-size: 22px; }
+  .nav-lbl { font-size: 10px; font-weight: 600; color: #94a3b8; }
+  .nav-btn.active .nav-lbl { color: #2563eb; }
+
+  /* Alert floating */
+  .floating-alert {
+    position: absolute; top: 0; left: 0; right: 0;
+    background: linear-gradient(90deg, #22c55e, #16a34a);
+    padding: 10px 16px;
+    display: flex; align-items: center; gap: 10px;
+    z-index: 99;
+    transform: translateY(-100%);
+    transition: transform 0.3s;
+    border-radius: 0 0 14px 14px;
+  }
+  .floating-alert.show { transform: translateY(82px); }
+  .alert-txt { color: #fff; font-size: 12px; font-weight: 600; }
+
+  /* Scrollbar mobile sim */
+  .content { scrollbar-width: none; }
+
+  /* Label sobre frame */
+  .frame-label {
+    text-align: center;
+    color: rgba(255,255,255,0.5);
+    font-size: 12px;
+    margin-bottom: 12px;
+    font-family: monospace;
+  }
+
+  /* Nota de mockup */
+  .mockup-note {
+    text-align: center;
+    color: rgba(255,255,255,0.35);
+    font-size: 11px;
+    margin-top: 14px;
+    font-family: monospace;
+    line-height: 1.6;
+  }
+
+  /* Responsive: en pantallas pequeñas centrar */
+  @media (max-width: 500px) {
+    body { padding: 0; align-items: flex-start; }
+    .phone-frame {
+      width: 100%; height: 100vh;
+      border-radius: 0;
+      box-shadow: none;
+    }
+  }
+</style>
+</head>
+<body>
+
+<div>
+  <p class="frame-label">▣ SGLab — App Motorizado · Preview mockup</p>
+
+  <div class="phone-frame" id="phone">
+
+    <!-- Alert flotante (feedback visual) -->
+    <div class="floating-alert" id="floatAlert">
+      <span>✅</span>
+      <span class="alert-txt">¡Ticket TKT-0042 tomado!</span>
+    </div>
+
+    <!-- Status bar -->
+    <div class="status-bar">
+      <span class="time">9:41</span>
+      <div class="status-icons">
+        <span>▲▲▲</span>
+        <span>WiFi</span>
+        <span>🔋</span>
+      </div>
+    </div>
+
+    <!-- Header -->
+    <div class="header">
+      <div class="header-top">
+        <div class="moto-info">
+          <div class="avatar">R</div>
+          <div>
+            <div class="moto-name">Roberto Quispe</div>
+            <div class="moto-sub">Moto · Placa A3K-221</div>
+          </div>
+        </div>
+        <div class="header-actions">
+          <div class="btn-icon">🔔</div>
+          <div class="btn-icon" onclick="doLogout()">⏻</div>
+        </div>
+      </div>
+
+      <div class="gps-bar">
+        <div class="gps-pill">
+          <div class="gps-dot"></div>
+          <span class="gps-txt">GPS activo</span>
+        </div>
+        <div class="estado-pill" onclick="showEstadoModal()">
+          <span style="font-size:13px">🟢</span>
+          <span class="estado-txt">Disponible</span>
+          <span class="estado-chevron">▾</span>
+        </div>
+      </div>
+
+      <div class="stats-row">
+        <div class="stat-mini">
+          <div class="val">2</div>
+          <div class="lbl">En curso</div>
+        </div>
+        <div class="stat-mini">
+          <div class="val">3</div>
+          <div class="lbl">Completados</div>
+        </div>
+        <div class="stat-mini">
+          <div class="val">S/. 45</div>
+          <div class="lbl">Cobrado hoy</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Tabs -->
+    <div class="tabs-container">
+      <button class="tab-btn active" id="tab-pendientes" onclick="switchTab('pendientes')">
+        <span class="tab-label">Pendientes</span>
+        <span class="tab-badge urgent">5</span>
+      </button>
+      <button class="tab-btn" id="tab-ruta" onclick="switchTab('ruta')">
+        <span class="tab-label">Mi Ruta</span>
+        <span class="tab-badge">2</span>
+      </button>
+    </div>
+
+    <!-- Content -->
+    <div class="content">
+
+      <!-- === PANEL PENDIENTES === -->
+      <div class="panel active" id="panel-pendientes">
+
+        <div class="section-header">
+          <span class="section-title">Disponibles para tomar</span>
+          <span class="section-count">5 tickets</span>
+        </div>
+
+        <!-- Ticket URGENTE 1 -->
+        <div class="ticket-card urgente">
+          <div class="card-header">
+            <div class="card-left">
+              <div class="ticket-code">TKT-0042</div>
+              <div class="ticket-ref">Clínica San Marcos</div>
+              <div class="ticket-dir">📍 Av. Brasil 1240, Breña</div>
+            </div>
+            <span class="badge-tipo urgente">⚡ URGENTE</span>
+          </div>
+          <div class="card-body">
+            <div class="info-chip"><span class="chip-ic">🧪</span><span>Sangre · 3 tubos</span></div>
+            <div class="info-chip"><span class="chip-ic">📞</span><span>987-654-321</span></div>
+            <div class="info-chip"><span class="chip-ic">🗺️</span><span>1.2 km</span></div>
+          </div>
+          <div class="card-footer">
+            <div class="time-limit">⏰ Límite: 10:30 AM</div>
+            <button class="btn-tomar urgente" onclick="tomarTicket(this, 'TKT-0042')">Tomar pedido</button>
+          </div>
+        </div>
+
+        <!-- Ticket NORMAL 1 -->
+        <div class="ticket-card normal">
+          <div class="card-header">
+            <div class="card-left">
+              <div class="ticket-code">TKT-0043</div>
+              <div class="ticket-ref">Farmacia Boticas &amp; Salud</div>
+              <div class="ticket-dir">📍 Jr. Huancavelica 380, Lima</div>
+            </div>
+            <span class="badge-tipo normal">NORMAL</span>
+          </div>
+          <div class="card-body">
+            <div class="info-chip"><span class="chip-ic">🧪</span><span>Orina · 1 frasco</span></div>
+            <div class="info-chip"><span class="chip-ic">📞</span><span>977-112-233</span></div>
+            <div class="info-chip"><span class="chip-ic">🗺️</span><span>2.8 km</span></div>
+          </div>
+          <div class="card-footer">
+            <div class="time-limit ok">⏰ Límite: 12:00 PM</div>
+            <button class="btn-tomar normal" onclick="tomarTicket(this, 'TKT-0043')">Tomar pedido</button>
+          </div>
+        </div>
+
+        <!-- Ticket URGENTE 2 -->
+        <div class="ticket-card urgente">
+          <div class="card-header">
+            <div class="card-left">
+              <div class="ticket-code">TKT-0044</div>
+              <div class="ticket-ref">Centro Médico Javier Prado</div>
+              <div class="ticket-dir">📍 Av. Javier Prado Este 499</div>
+            </div>
+            <span class="badge-tipo urgente">⚡ URGENTE</span>
+          </div>
+          <div class="card-body">
+            <div class="info-chip"><span class="chip-ic">🧪</span><span>Cultivo · 2 placas</span></div>
+            <div class="info-chip"><span class="chip-ic">📞</span><span>995-887-441</span></div>
+            <div class="info-chip"><span class="chip-ic">🗺️</span><span>3.5 km</span></div>
+          </div>
+          <div class="card-footer">
+            <div class="time-limit">⏰ Límite: 10:00 AM</div>
+            <button class="btn-tomar urgente" onclick="tomarTicket(this, 'TKT-0044')">Tomar pedido</button>
+          </div>
+        </div>
+
+        <!-- Ticket NORMAL 2 -->
+        <div class="ticket-card normal">
+          <div class="card-header">
+            <div class="card-left">
+              <div class="ticket-code">TKT-0045</div>
+              <div class="ticket-ref">Clínica Miraflores</div>
+              <div class="ticket-dir">📍 Av. Larco 1301, Miraflores</div>
+            </div>
+            <span class="badge-tipo normal">NORMAL</span>
+          </div>
+          <div class="card-body">
+            <div class="info-chip"><span class="chip-ic">🧪</span><span>Heces · 1 muestra</span></div>
+            <div class="info-chip"><span class="chip-ic">📞</span><span>966-443-112</span></div>
+            <div class="info-chip"><span class="chip-ic">🗺️</span><span>4.1 km</span></div>
+          </div>
+          <div class="card-footer">
+            <div class="time-limit ok">⏰ Límite: 1:30 PM</div>
+            <button class="btn-tomar normal" onclick="tomarTicket(this, 'TKT-0045')">Tomar pedido</button>
+          </div>
+        </div>
+
+        <!-- Ticket NORMAL 3 -->
+        <div class="ticket-card normal">
+          <div class="card-header">
+            <div class="card-left">
+              <div class="ticket-code">TKT-0046</div>
+              <div class="ticket-ref">Policlínico San Pedro</div>
+              <div class="ticket-dir">📍 Calle Las Camelias 890, SMP</div>
+            </div>
+            <span class="badge-tipo normal">NORMAL</span>
+          </div>
+          <div class="card-body">
+            <div class="info-chip"><span class="chip-ic">🧪</span><span>Sangre · 2 tubos</span></div>
+            <div class="info-chip"><span class="chip-ic">📞</span><span>911-223-445</span></div>
+            <div class="info-chip"><span class="chip-ic">🗺️</span><span>5.7 km</span></div>
+          </div>
+          <div class="card-footer">
+            <div class="time-limit ok">⏰ Límite: 2:00 PM</div>
+            <button class="btn-tomar normal" onclick="tomarTicket(this, 'TKT-0046')">Tomar pedido</button>
+          </div>
+        </div>
+
+        <div style="height: 16px;"></div>
+      </div>
+
+      <!-- === PANEL MI RUTA === -->
+      <div class="panel" id="panel-ruta">
+
+        <!-- En curso section -->
+        <div class="section-header">
+          <span class="section-title">En curso</span>
+          <span class="section-count">2 activos</span>
+        </div>
+
+        <!-- Ticket EN_RUTA -->
+        <div class="ruta-card">
+          <div class="ruta-card-header">
+            <div class="ruta-left">
+              <div class="ruta-code">TKT-0038 · <span style="color:#ef4444;font-weight:700;">⚡ URGENTE</span></div>
+              <div class="ruta-ref">Hospital Rebagliati</div>
+              <div class="ruta-dir">📍 Av. Edgardo Rebagliati 490</div>
+            </div>
+            <span class="estado-badge en-ruta">En ruta</span>
+          </div>
+
+          <!-- Pasos de progreso -->
+          <div class="steps-row">
+            <div class="step">
+              <div class="step-dot done">✓</div>
+              <div class="step-lbl done">Tomado</div>
+            </div>
+            <div class="step-line done"></div>
+            <div class="step">
+              <div class="step-dot active">→</div>
+              <div class="step-lbl active">En ruta</div>
+            </div>
+            <div class="step-line pending"></div>
+            <div class="step">
+              <div class="step-dot pending">3</div>
+              <div class="step-lbl">Recojo</div>
+            </div>
+            <div class="step-line pending"></div>
+            <div class="step">
+              <div class="step-dot pending">4</div>
+              <div class="step-lbl">Entregado</div>
+            </div>
+          </div>
+
+          <div class="ruta-action">
+            <button class="btn-accion en-ruta">
+              📍 Llegué al punto de recojo
+            </button>
+          </div>
+        </div>
+
+        <!-- Ticket EN_RECOJO -->
+        <div class="ruta-card">
+          <div class="ruta-card-header">
+            <div class="ruta-left">
+              <div class="ruta-code">TKT-0039 · <span style="color:#3b82f6;font-weight:700;">NORMAL</span></div>
+              <div class="ruta-ref">Clínica Internacional</div>
+              <div class="ruta-dir">📍 Av. Garcilazo de la Vega 1420</div>
+            </div>
+            <span class="estado-badge en-recojo">En recojo</span>
+          </div>
+
+          <div class="steps-row">
+            <div class="step">
+              <div class="step-dot done">✓</div>
+              <div class="step-lbl done">Tomado</div>
+            </div>
+            <div class="step-line done"></div>
+            <div class="step">
+              <div class="step-dot done">✓</div>
+              <div class="step-lbl done">En ruta</div>
+            </div>
+            <div class="step-line done"></div>
+            <div class="step">
+              <div class="step-dot active">📷</div>
+              <div class="step-lbl active">Recojo</div>
+            </div>
+            <div class="step-line pending"></div>
+            <div class="step">
+              <div class="step-dot pending">4</div>
+              <div class="step-lbl">Entregado</div>
+            </div>
+          </div>
+
+          <div class="ruta-action">
+            <button class="btn-accion en-recojo">
+              📋 Registrar recojo y foto
+            </button>
+          </div>
+        </div>
+
+        <!-- Completados (colapsable) -->
+        <div class="completados-header">
+          <div class="completados-toggle" onclick="toggleCompletados()">
+            <div class="completados-title">
+              <span>✅</span>
+              <span>Completados hoy</span>
+              <span class="completados-badge">3</span>
+            </div>
+            <span class="chevron" id="chevron">▾</span>
+          </div>
+
+          <div class="completados-list" id="completados-list">
+            <div class="completed-item">
+              <div class="check-circle">✅</div>
+              <div class="completed-info">
+                <div class="completed-ref">Farmacia Cruz Verde</div>
+                <div class="completed-meta">TKT-0035 · Sangre · 2 tubos</div>
+              </div>
+              <div class="completed-time">8:12 AM</div>
+            </div>
+            <div class="completed-item">
+              <div class="check-circle">✅</div>
+              <div class="completed-info">
+                <div class="completed-ref">Centro Médico Lince</div>
+                <div class="completed-meta">TKT-0036 · Orina · 1 frasco</div>
+              </div>
+              <div class="completed-time">8:54 AM</div>
+            </div>
+            <div class="completed-item">
+              <div class="check-circle">✅</div>
+              <div class="completed-info">
+                <div class="completed-ref">Policlínico La Victoria</div>
+                <div class="completed-meta">TKT-0037 · Heces · 1 muestra</div>
+              </div>
+              <div class="completed-time">9:22 AM</div>
+            </div>
+          </div>
+        </div>
+
+        <div style="height: 16px;"></div>
+      </div>
+
+    </div><!-- /content -->
+
+  </div><!-- /phone-frame -->
+
+  <p class="mockup-note">
+    HTML standalone · Abrí en navegador para ver interactivo<br>
+    Click en "Tomar pedido" y tabs para probar la interacción
+  </p>
+</div>
+
+<script>
+  function switchTab(tab) {
+    // Tabs
+    document.getElementById('tab-pendientes').classList.toggle('active', tab === 'pendientes');
+    document.getElementById('tab-ruta').classList.toggle('active', tab === 'ruta');
+    // Panels
+    document.getElementById('panel-pendientes').classList.toggle('active', tab === 'pendientes');
+    document.getElementById('panel-ruta').classList.toggle('active', tab === 'ruta');
+    // Scroll top
+    document.querySelector('.content').scrollTop = 0;
+  }
+
+  function toggleCompletados() {
+    const list = document.getElementById('completados-list');
+    const chevron = document.getElementById('chevron');
+    list.classList.toggle('open');
+    chevron.classList.toggle('open');
+  }
+
+  function tomarTicket(btn, code) {
+    // Animación del botón
+    btn.textContent = '⏳ Tomando...';
+    btn.style.opacity = '0.7';
+    btn.disabled = true;
+
+    setTimeout(() => {
+      // Remover la tarjeta con fade
+      const card = btn.closest('.ticket-card');
+      card.style.transition = 'all 0.3s';
+      card.style.opacity = '0';
+      card.style.transform = 'translateX(30px)';
+
+      // Actualizar badge del tab
+      const badge = document.querySelector('#tab-pendientes .tab-badge');
+      const current = parseInt(badge.textContent);
+      if (current > 1) {
+        badge.textContent = current - 1;
+      } else {
+        badge.textContent = '0';
+        badge.style.display = 'none';
+      }
+
+      // Mostrar alert flotante
+      const alert = document.getElementById('floatAlert');
+      alert.querySelector('.alert-txt').textContent = '¡Ticket ' + code + ' tomado! Está en Mi Ruta';
+      alert.classList.add('show');
+
+      setTimeout(() => {
+        card.remove();
+        // Actualizar conteo
+        const count = document.querySelectorAll('#panel-pendientes .ticket-card').length;
+        document.querySelector('#panel-pendientes .section-count').textContent = count + ' ticket' + (count !== 1 ? 's' : '');
+        if (count === 0) {
+          const panel = document.getElementById('panel-pendientes');
+          const existing = panel.querySelector('.empty-state');
+          if (!existing) {
+            const empty = document.createElement('div');
+            empty.className = 'empty-state';
+            empty.innerHTML = '<div class="empty-ic">🎉</div><div class="empty-title">¡Todo tomado!</div><div class="empty-sub">No hay más tickets disponibles<br>por el momento.</div>';
+            panel.appendChild(empty);
+          }
+        }
+      }, 300);
+
+      setTimeout(() => {
+        alert.classList.remove('show');
+      }, 2500);
+    }, 900);
+  }
+
+  function showEstadoModal() {
+    const estados = [
+      { key: 'DISPONIBLE', ic: '🟢', label: 'Disponible', desc: 'Listo para tomar pedidos' },
+      { key: 'EN_REFRIGERIO', ic: '🍽️', label: 'En refrigerio', desc: 'En pausa / almuerzo' },
+      { key: 'OFFLINE', ic: '⚫', label: 'Offline', desc: 'No disponible por ahora' }
+    ];
+
+    // Crear modal simple
+    const overlay = document.createElement('div');
+    overlay.style.cssText = 'position:absolute;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,0.5);z-index:200;display:flex;align-items:flex-end;border-radius:44px;overflow:hidden;';
+
+    const sheet = document.createElement('div');
+    sheet.style.cssText = 'width:100%;background:#fff;border-radius:24px 24px 0 0;padding:20px 16px 32px;';
+
+    let html = '<div style="text-align:center;margin-bottom:16px;"><div style="width:36px;height:4px;background:#e2e8f0;border-radius:2px;margin:0 auto 14px;"></div><div style="font-size:15px;font-weight:700;color:#1e293b;">Cambiar estado</div></div>';
+    estados.forEach(e => {
+      html += `<div onclick="setEstado('${e.ic}', '${e.label}', this.closest('.overlay-parent'))" style="display:flex;align-items:center;gap:12px;padding:13px 12px;border-radius:12px;margin-bottom:8px;background:#f8fafc;border:1px solid #e2e8f0;cursor:pointer;">
+        <span style="font-size:22px;">${e.ic}</span>
+        <div>
+          <div style="font-size:14px;font-weight:700;color:#1e293b;">${e.label}</div>
+          <div style="font-size:12px;color:#94a3b8;">${e.desc}</div>
+        </div>
+      </div>`;
+    });
+    html += `<button onclick="this.closest('.overlay-parent').remove()" style="width:100%;padding:12px;margin-top:4px;border-radius:12px;border:1px solid #e2e8f0;background:#f1f5f9;color:#64748b;font-size:14px;font-weight:600;cursor:pointer;">Cancelar</button>`;
+
+    sheet.innerHTML = html;
+    overlay.classList.add('overlay-parent');
+    overlay.appendChild(sheet);
+    overlay.onclick = (e) => { if (e.target === overlay) overlay.remove(); };
+    document.getElementById('phone').appendChild(overlay);
+  }
+
+  function setEstado(ic, label, overlay) {
+    const pill = document.querySelector('.estado-pill');
+    pill.querySelector('.estado-txt').textContent = label;
+    pill.querySelector('span:first-child').textContent = ic;
+    if (overlay) overlay.remove();
+  }
+
+  function doLogout() {
+    const overlay = document.createElement('div');
+    overlay.style.cssText = 'position:absolute;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,0.6);z-index:200;display:flex;align-items:center;justify-content:center;border-radius:44px;overflow:hidden;';
+
+    const modal = document.createElement('div');
+    modal.style.cssText = 'background:#fff;border-radius:20px;padding:24px 20px;margin:20px;text-align:center;';
+    modal.innerHTML = `
+      <div style="font-size:36px;margin-bottom:12px;">⏻</div>
+      <div style="font-size:16px;font-weight:700;color:#1e293b;margin-bottom:6px;">Cerrar sesión</div>
+      <div style="font-size:13px;color:#64748b;margin-bottom:20px;line-height:1.5;">¿Seguro que quieres cerrar tu sesión? Se detendrá el tracking GPS.</div>
+      <div style="display:flex;gap:10px;">
+        <button onclick="this.closest('.ol').remove()" style="flex:1;padding:11px;border-radius:10px;border:1px solid #e2e8f0;background:#f1f5f9;color:#64748b;font-size:14px;font-weight:600;cursor:pointer;">Cancelar</button>
+        <button style="flex:1;padding:11px;border-radius:10px;border:none;background:linear-gradient(135deg,#ef4444,#dc2626);color:#fff;font-size:14px;font-weight:600;cursor:pointer;">Salir</button>
+      </div>`;
+
+    overlay.classList.add('ol');
+    overlay.appendChild(modal);
+    overlay.onclick = (e) => { if (e.target === overlay) overlay.remove(); };
+    document.getElementById('phone').appendChild(overlay);
+
+    // Fix para el cancel btn que usa closest
+    modal.querySelector('button').onclick = () => overlay.remove();
+  }
+</script>
+</body>
+</html>

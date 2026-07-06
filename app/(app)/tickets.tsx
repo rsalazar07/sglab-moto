@@ -1,8 +1,8 @@
-import { useEffect, useState, useCallback, useRef, memo } from 'react';
+import { useEffect, useState, useCallback, useRef, memo, useMemo } from 'react';
 import {
   View, Text, FlatList, TouchableOpacity, StyleSheet,
   RefreshControl, Alert, Modal, TextInput, ScrollView,
-  ActivityIndicator, Image,
+  ActivityIndicator, Image, Linking,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { activateKeepAwakeAsync, deactivateKeepAwake } from 'expo-keep-awake';
@@ -96,7 +96,9 @@ const TicketCard = memo(({ item, config, loadingId, onAvanzar }: {
   return (
     <View style={[s.tcard, { borderLeftColor: esUrgente ? '#E74C3C' : borderColor, borderLeftWidth: esUrgente ? 6 : 4, padding: sp.cardPadding || 13, borderRadius: (DT?.borderRadius?.card ?? 12) }, (uiStatus === 'active' || uiStatus === 'pendiente') && s.tcardActive]}>
       <View style={s.tcTop}>
-        <Text style={[s.tcId, { fontSize: fs.micro || 9 }]}>🕐 {new Date(item.createdAt).toLocaleTimeString('es-PE', { hour:'2-digit', minute:'2-digit' })}</Text>
+        {(screen.showCreatedAt !== false) && (
+          <Text style={[s.tcId, { fontSize: fs.micro || 9 }]}>🕐 {new Date(item.createdAt).toLocaleTimeString('es-PE', { hour:'2-digit', minute:'2-digit' })}</Text>
+        )}
         <View style={[s.badge, {
           backgroundColor: uiStatus === 'pendiente' ? C.blueLight : uiStatus === 'pending' ? C.orangeLight : uiStatus === 'active' ? C.blueLight : C.grayLight,
           borderColor: uiStatus === 'pendiente' ? C.blueBorder : uiStatus === 'pending' ? C.orange : uiStatus === 'active' ? C.blueBorder : C.gray,
@@ -135,15 +137,29 @@ const TicketCard = memo(({ item, config, loadingId, onAvanzar }: {
         <Text style={[s.notas, { fontSize: fs.small || 10 }]}>📝 {item.notas}</Text>
       )}
 
-      {!isDone && btnLabel && (
-        <TouchableOpacity
-          style={[s.abtn, { backgroundColor: btnColor, padding: sp.buttonPadding || 10, minHeight: DT?.layout?.buttonMinHeight ?? 48, borderRadius: DT?.borderRadius?.button ?? 8 }, cargando && { opacity: 0.6 }]}
-          onPress={() => onAvanzar(item)}
-          disabled={cargando}
-          activeOpacity={0.82}
-        >
-          <Text style={[s.abtnTxt, { fontSize: fs.body || 14 }]} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.7}>{cargando ? (UL.btnCargando || 'Actualizando...') : btnLabel}</Text>
-        </TouchableOpacity>
+      {!isDone && (!!btnLabel || ((screen.showMapButton !== false) && !!item.referencia?.latitud && !!item.referencia?.longitud)) && (
+        <View style={{ flexDirection: 'row', gap: 6, marginTop: 8, alignItems: 'stretch' }}>
+          {!!btnLabel && (
+            <TouchableOpacity
+              style={[s.abtn, { flex: 1, backgroundColor: btnColor, padding: sp.buttonPadding || 10, minHeight: DT?.layout?.buttonMinHeight ?? 48, borderRadius: DT?.borderRadius?.button ?? 8, marginTop: 0 }, cargando && { opacity: 0.6 }]}
+              onPress={() => onAvanzar(item)}
+              disabled={cargando}
+              activeOpacity={0.82}
+            >
+              <Text style={[s.abtnTxt, { fontSize: fs.body || 14 }]} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.7}>{cargando ? (UL.btnCargando || 'Actualizando...') : btnLabel}</Text>
+            </TouchableOpacity>
+          )}
+          {(screen.showMapButton !== false) && !!item.referencia?.latitud && !!item.referencia?.longitud && (
+            <TouchableOpacity
+              style={[s.mapBtn, { borderColor: C.blue, minHeight: DT?.layout?.buttonMinHeight ?? 48, borderRadius: DT?.borderRadius?.button ?? 8 }]}
+              onPress={() => Linking.openURL(`https://www.google.com/maps/dir/?api=1&destination=${item.referencia!.latitud},${item.referencia!.longitud}`)}
+              activeOpacity={0.82}
+            >
+              <Text style={s.mapBtnIc}>📍</Text>
+              <Text style={[s.mapBtnTxt, { color: C.blue }]}>Llegar</Text>
+            </TouchableOpacity>
+          )}
+        </View>
       )}
 
       {isDone && (
@@ -179,6 +195,8 @@ export default function TicketsScreen() {
   const [subiendo, setSubiendo] = useState(false);
 
   const currentTicketId = useRef<string | null>(null);
+  const [activeTab, setActiveTab] = useState<'pendientes' | 'mi-ruta'>('pendientes');
+  const [completadosExpanded, setCompletadosExpanded] = useState(false);
   const { startTracking, stopTracking } = useTracking();
 
   // ─── Leer configuración SDUI desde VPS ───
@@ -468,27 +486,33 @@ export default function TicketsScreen() {
     try { await api.patch(`/motorizados/me/estado`, { estado: e.backendEstado || estadoSel }); } catch { log('WARN', 'turno', 'Error al confirmar estado moto'); }
   };
 
-  // Separar tickets por grupo
-  const tf = config?.ticketFlow || {};
-  const activos = tickets.filter(t => (tf[t.estado] || 'done') === 'active');
-  const asignados = tickets.filter(t => (tf[t.estado] || 'done') === 'pending');
-  const pendientes = tickets.filter(t => (tf[t.estado] || 'done') === 'pendiente');
-  const hoy = new Date().toDateString();
-  const completados = tickets.filter(t => (tf[t.estado] || 'done') === 'done' && new Date(t.createdAt).toDateString() === hoy);
+  const tabData = useMemo(() => {
+    const tf = config?.ticketFlow || {};
+    const hoy = new Date().toDateString();
+    const pendientesArr = tickets.filter(t => (tf[t.estado] || 'done') === 'pendiente');
+    const asignadosArr = tickets.filter(t => (tf[t.estado] || 'done') === 'pending');
+    const activosArr = tickets.filter(t => (tf[t.estado] || 'done') === 'active');
+    const completadosArr = tickets.filter(t => (tf[t.estado] || 'done') === 'done' && new Date(t.createdAt).toDateString() === hoy);
+    const PRIO: Record<string, number> = { EN_RECOJO: 0, EN_RUTA: 1, EN_LABORATORIO: 2, RECOGIDO: 3, ASIGNADO: 4 };
+    const enCurso = [...asignadosArr, ...activosArr].sort((a, b) => (PRIO[a.estado] ?? 99) - (PRIO[b.estado] ?? 99));
+    return { pendientesArr, asignadosArr, activosArr, enCurso, completadosArr };
+  }, [tickets, config]);
 
   const eActual = config?.estadosMoto?.[estadoMoto] || {};
 
-  // ─── Secciones dinámicas desde SDUI ───
-  const listaCompleta = [
-    ...((sections?.activos !== false && activos.length > 0) ? [{ _sep: UL.seccionEnCamino || '🔵 En camino', _color: C.blue }] : []),
-    ...(sections?.activos !== false ? activos : []),
-    ...((sections?.pendientes !== false && pendientes.length > 0) ? [{ _sep: UL.seccionPendientes || '📋 Pendientes', _color: C.blue }] : []),
-    ...(sections?.pendientes !== false ? pendientes : []),
-    ...((sections?.asignados !== false && asignados.length > 0) ? [{ _sep: UL.seccionAsignados || '⏳ Asignados', _color: C.orange }] : []),
-    ...(sections?.asignados !== false ? asignados : []),
-    ...((sections?.completados !== false && completados.length > 0) ? [{ _sep: UL.seccionCompletados || '✅ Recogidos', _color: C.green }] : []),
-    ...(sections?.completados !== false ? completados : []),
-  ] as any[];
+  const tabLabelPendientes = UL.tabPendientes || 'Pendientes';
+  const tabLabelMiRuta = UL.tabMiRuta || 'Mi Ruta';
+  const seccionEnCurso = UL.seccionEnCurso || '🔵 En curso';
+  const seccionCompletados = UL.seccionCompletados || '✅ Completados';
+
+  const listaCompleta: any[] = activeTab === 'pendientes'
+    ? tabData.pendientesArr
+    : [
+      ...(tabData.enCurso.length > 0 ? [{ _sep: seccionEnCurso, _color: C.blue }] : []),
+      ...tabData.enCurso,
+      { _sep: `${seccionCompletados} (${tabData.completadosArr.length}) ${completadosExpanded ? '▲' : '▼'}`, _color: C.green, _collapsible: true },
+      ...(completadosExpanded ? tabData.completadosArr : []),
+    ];
 
   return (
     <SafeAreaView style={s.root} edges={['top']}>
@@ -527,19 +551,19 @@ export default function TicketsScreen() {
         {(screen.showStats !== false) && (
         <View style={s.qsRow}>
           <View style={s.qs}>
-            <Text style={[s.qsVal, { color: C.blue }]}>{pendientes.length}</Text>
+            <Text style={[s.qsVal, { color: C.blue }]}>{tabData.pendientesArr.length}</Text>
             <Text style={s.qsLbl}>{UL.statsPendientes || 'Pendientes'}</Text>
           </View>
           <View style={s.qs}>
-            <Text style={[s.qsVal, { color: C.orange }]}>{asignados.length}</Text>
+            <Text style={[s.qsVal, { color: C.orange }]}>{tabData.asignadosArr.length}</Text>
             <Text style={s.qsLbl}>{UL.statsAsignados || 'Asignados'}</Text>
           </View>
           <View style={s.qs}>
-            <Text style={[s.qsVal, { color: C.blue }]}>{activos.length}</Text>
+            <Text style={[s.qsVal, { color: C.blue }]}>{tabData.activosArr.length}</Text>
             <Text style={s.qsLbl}>{UL.statsEnCamino || 'En ruta'}</Text>
           </View>
           <View style={s.qs}>
-            <Text style={[s.qsVal, { color: C.green }]}>{completados.length}</Text>
+            <Text style={[s.qsVal, { color: C.green }]}>{tabData.completadosArr.length}</Text>
             <Text style={s.qsLbl}>{UL.statsCompletados || 'Recogidos'}</Text>
           </View>
         </View>
@@ -551,6 +575,34 @@ export default function TicketsScreen() {
       <View style={[s.banner, { backgroundColor: eActual.bg }]}>
         <Text style={s.bannerIc}>{eActual.bannerIc}</Text>
         <Text style={[s.bannerTxt, { color: eActual.color }]}>{eActual.bannerTxt}</Text>
+      </View>
+
+      {/* ─── TAB BAR (controlable desde VPS) ─── */}
+      <View style={s.tabBar}>
+        <TouchableOpacity
+          style={[s.tab, activeTab === 'pendientes' && { borderBottomColor: C.blue }]}
+          onPress={() => setActiveTab('pendientes')}
+          activeOpacity={0.82}
+        >
+          <Text style={[s.tabTxt, activeTab === 'pendientes' && { color: C.blue }]}>{tabLabelPendientes}</Text>
+          {tabData.pendientesArr.length > 0 && (
+            <View style={[s.tabBadge, { backgroundColor: C.blue }]}>
+              <Text style={s.tabBadgeTxt}>{tabData.pendientesArr.length}</Text>
+            </View>
+          )}
+        </TouchableOpacity>
+        <TouchableOpacity
+          style={[s.tab, activeTab === 'mi-ruta' && { borderBottomColor: C.orange }]}
+          onPress={() => setActiveTab('mi-ruta')}
+          activeOpacity={0.82}
+        >
+          <Text style={[s.tabTxt, activeTab === 'mi-ruta' && { color: C.orange }]}>{tabLabelMiRuta}</Text>
+          {(tabData.enCurso.length + tabData.completadosArr.length) > 0 && (
+            <View style={[s.tabBadge, { backgroundColor: C.orange }]}>
+              <Text style={s.tabBadgeTxt}>{tabData.enCurso.length + tabData.completadosArr.length}</Text>
+            </View>
+          )}
+        </TouchableOpacity>
       </View>
 
       {/* Lista tickets */}

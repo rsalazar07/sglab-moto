@@ -1,0 +1,1518 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>SGLab Motorizado v2 — Mockup</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+
+  body {
+    background: #0f1117;
+    min-height: 100vh;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: flex-start;
+    padding: 32px 20px 48px;
+    font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Segoe UI', sans-serif;
+  }
+
+  h1 {
+    color: #888;
+    font-size: 11px;
+    letter-spacing: 2px;
+    text-transform: uppercase;
+    margin-bottom: 20px;
+    font-weight: 500;
+  }
+
+  /* ──────── PHONE FRAME ──────── */
+  .phone-wrap {
+    position: relative;
+    width: 393px;
+  }
+
+  .phone-frame {
+    width: 393px;
+    height: 852px;
+    background: #f2f4f7;
+    border-radius: 50px;
+    box-shadow:
+      0 0 0 2px #2a2a2a,
+      0 0 0 6px #1a1a1a,
+      0 0 0 8px #444,
+      0 40px 100px rgba(0,0,0,0.8);
+    overflow: hidden;
+    display: flex;
+    flex-direction: column;
+    position: relative;
+  }
+
+  /* Notch / Dynamic Island */
+  .dynamic-island {
+    position: absolute;
+    top: 12px;
+    left: 50%;
+    transform: translateX(-50%);
+    width: 120px;
+    height: 34px;
+    background: #000;
+    border-radius: 20px;
+    z-index: 100;
+  }
+
+  /* ──────── STATUS BAR ──────── */
+  .status-bar {
+    background: #1035a8;
+    padding: 16px 24px 8px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    flex-shrink: 0;
+    padding-top: 54px; /* espacio para dynamic island */
+  }
+
+  .status-time {
+    color: #fff;
+    font-size: 15px;
+    font-weight: 700;
+    letter-spacing: 0.3px;
+  }
+
+  .status-icons {
+    display: flex;
+    gap: 5px;
+    align-items: center;
+  }
+
+  .status-icons span {
+    color: #fff;
+    font-size: 13px;
+  }
+
+  /* ──────── HEADER ──────── */
+  .header {
+    background: linear-gradient(170deg, #1035a8 0%, #0c257a 100%);
+    padding: 12px 16px 14px;
+    flex-shrink: 0;
+  }
+
+  .header-top {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    margin-bottom: 12px;
+  }
+
+  .moto-info {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+  }
+
+  .avatar {
+    width: 40px;
+    height: 40px;
+    background: linear-gradient(135deg, #4d9fff, #2563eb);
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 18px;
+    flex-shrink: 0;
+    border: 2px solid rgba(255,255,255,0.3);
+  }
+
+  .moto-name {
+    color: #fff;
+    font-size: 15px;
+    font-weight: 700;
+    line-height: 1.2;
+  }
+
+  .moto-plate {
+    color: rgba(255,255,255,0.6);
+    font-size: 11px;
+    font-weight: 500;
+    margin-top: 2px;
+  }
+
+  .gps-badge {
+    display: flex;
+    align-items: center;
+    gap: 5px;
+    background: rgba(0,0,0,0.25);
+    border-radius: 20px;
+    padding: 5px 10px;
+    border: 1px solid rgba(255,255,255,0.1);
+  }
+
+  .gps-dot {
+    width: 7px;
+    height: 7px;
+    border-radius: 50%;
+    background: #22c55e;
+    box-shadow: 0 0 6px #22c55e;
+    animation: pulse-gps 2s infinite;
+  }
+
+  @keyframes pulse-gps {
+    0%, 100% { opacity: 1; transform: scale(1); }
+    50% { opacity: 0.6; transform: scale(0.85); }
+  }
+
+  .gps-text {
+    color: #fff;
+    font-size: 11px;
+    font-weight: 600;
+  }
+
+  /* Stats row */
+  .stats-row {
+    display: flex;
+    gap: 8px;
+  }
+
+  .stat-card {
+    flex: 1;
+    background: rgba(255,255,255,0.1);
+    border-radius: 10px;
+    padding: 8px 10px;
+    border: 1px solid rgba(255,255,255,0.08);
+    text-align: center;
+  }
+
+  .stat-value {
+    color: #fff;
+    font-size: 18px;
+    font-weight: 800;
+    line-height: 1;
+  }
+
+  .stat-label {
+    color: rgba(255,255,255,0.55);
+    font-size: 9px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    margin-top: 2px;
+  }
+
+  .stat-card.green .stat-value { color: #4ade80; }
+  .stat-card.amber .stat-value { color: #fbbf24; }
+
+  /* ──────── INNER TABS (Pendientes / Mi Ruta) ──────── */
+  .inner-tabs {
+    background: #0c257a;
+    display: flex;
+    padding: 8px 14px;
+    gap: 6px;
+    flex-shrink: 0;
+    border-bottom: 1px solid rgba(255,255,255,0.06);
+  }
+
+  .inner-tab {
+    flex: 1;
+    padding: 7px 6px;
+    border-radius: 8px;
+    text-align: center;
+    font-size: 12px;
+    font-weight: 700;
+    color: rgba(255,255,255,0.5);
+    cursor: pointer;
+    transition: all 0.2s;
+    position: relative;
+    border: none;
+    background: transparent;
+    letter-spacing: 0.2px;
+  }
+
+  .inner-tab.active {
+    background: rgba(255,255,255,0.15);
+    color: #fff;
+  }
+
+  .inner-tab .badge {
+    position: absolute;
+    top: 3px;
+    right: 8px;
+    background: #ef4444;
+    color: #fff;
+    font-size: 9px;
+    font-weight: 800;
+    border-radius: 10px;
+    padding: 1px 5px;
+    min-width: 16px;
+    text-align: center;
+    line-height: 14px;
+  }
+
+  /* ──────── SCROLL CONTENT ──────── */
+  .scroll-content {
+    flex: 1;
+    overflow-y: auto;
+    padding: 12px 12px 8px;
+    scrollbar-width: none;
+  }
+
+  .scroll-content::-webkit-scrollbar { display: none; }
+
+  /* ──────── SECTION HEADER ──────── */
+  .section-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 8px;
+    margin-top: 4px;
+  }
+
+  .section-title {
+    font-size: 11px;
+    font-weight: 700;
+    color: #64748b;
+    text-transform: uppercase;
+    letter-spacing: 0.8px;
+  }
+
+  .section-count {
+    background: #e2e8f0;
+    color: #64748b;
+    font-size: 10px;
+    font-weight: 700;
+    border-radius: 8px;
+    padding: 2px 7px;
+  }
+
+  .section-toggle {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    background: none;
+    border: none;
+    cursor: pointer;
+    color: #64748b;
+    font-size: 11px;
+    font-weight: 600;
+    padding: 4px 8px;
+    border-radius: 6px;
+    transition: background 0.15s;
+  }
+
+  .section-toggle:hover { background: #e2e8f0; }
+
+  .toggle-arrow {
+    font-size: 9px;
+    transition: transform 0.25s ease;
+  }
+
+  .toggle-arrow.open { transform: rotate(180deg); }
+
+  /* ──────── TICKET CARD ──────── */
+  .ticket-card {
+    background: #fff;
+    border-radius: 14px;
+    margin-bottom: 10px;
+    box-shadow: 0 1px 4px rgba(0,0,0,0.07), 0 4px 12px rgba(0,0,0,0.04);
+    overflow: hidden;
+    transition: box-shadow 0.2s;
+    border: 1px solid #e8edf2;
+  }
+
+  .ticket-card:hover {
+    box-shadow: 0 2px 8px rgba(0,0,0,0.12), 0 8px 24px rgba(0,0,0,0.06);
+  }
+
+  /* Color strip top */
+  .card-strip {
+    height: 3px;
+    background: #dde3ea;
+  }
+
+  .card-strip.urgente { background: linear-gradient(90deg, #ef4444, #f97316); }
+  .card-strip.normal  { background: linear-gradient(90deg, #3b82f6, #6366f1); }
+  .card-strip.enruta  { background: linear-gradient(90deg, #f59e0b, #f97316); }
+  .card-strip.done    { background: linear-gradient(90deg, #22c55e, #16a34a); }
+
+  .card-body {
+    padding: 10px 12px 10px;
+  }
+
+  /* Card top row */
+  .card-top {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    margin-bottom: 8px;
+  }
+
+  .card-meta {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+  }
+
+  .ticket-code {
+    font-size: 12px;
+    font-weight: 700;
+    color: #1e293b;
+    letter-spacing: 0.3px;
+  }
+
+  .ticket-time {
+    color: #94a3b8;
+    font-size: 10px;
+    font-weight: 500;
+  }
+
+  .ticket-badges {
+    display: flex;
+    gap: 4px;
+    align-items: center;
+    flex-wrap: wrap;
+    justify-content: flex-end;
+  }
+
+  .badge {
+    font-size: 9px;
+    font-weight: 700;
+    padding: 3px 7px;
+    border-radius: 6px;
+    letter-spacing: 0.3px;
+    white-space: nowrap;
+  }
+
+  .badge-urgente  { background: #fef2f2; color: #dc2626; border: 1px solid #fca5a5; }
+  .badge-normal   { background: #eff6ff; color: #2563eb; border: 1px solid #bfdbfe; }
+  .badge-enruta   { background: #fffbeb; color: #d97706; border: 1px solid #fde68a; }
+  .badge-recojo   { background: #f0fdf4; color: #16a34a; border: 1px solid #bbf7d0; }
+  .badge-pendiente{ background: #f8fafc; color: #64748b; border: 1px solid #cbd5e1; }
+  .badge-cerrado  { background: #f0fdf4; color: #15803d; border: 1px solid #86efac; }
+
+  /* Referencia */
+  .card-ref {
+    display: flex;
+    align-items: flex-start;
+    gap: 6px;
+    margin-bottom: 7px;
+    background: #f8fafc;
+    border-radius: 8px;
+    padding: 7px 9px;
+    border: 1px solid #e2e8f0;
+  }
+
+  .ref-icon {
+    font-size: 14px;
+    margin-top: 1px;
+    flex-shrink: 0;
+  }
+
+  .ref-name {
+    font-size: 13px;
+    font-weight: 700;
+    color: #1e293b;
+    line-height: 1.3;
+  }
+
+  .ref-address {
+    font-size: 11px;
+    color: #64748b;
+    margin-top: 1px;
+    line-height: 1.4;
+  }
+
+  /* Muestra row */
+  .card-muestra {
+    display: flex;
+    align-items: center;
+    gap: 5px;
+    margin-bottom: 9px;
+  }
+
+  .muestra-ic { font-size: 12px; }
+
+  .muestra-text {
+    font-size: 11px;
+    color: #475569;
+    font-weight: 600;
+  }
+
+  .muestra-sep {
+    color: #cbd5e1;
+    font-size: 11px;
+  }
+
+  .hora-limit {
+    font-size: 10px;
+    font-weight: 600;
+    padding: 2px 6px;
+    border-radius: 5px;
+    background: #fef2f2;
+    color: #dc2626;
+  }
+
+  .hora-limit.ok {
+    background: #f0fdf4;
+    color: #16a34a;
+  }
+
+  /* Card actions */
+  .card-actions {
+    display: flex;
+    gap: 6px;
+    margin-top: 2px;
+  }
+
+  .btn {
+    flex: 1;
+    padding: 9px 8px;
+    border-radius: 9px;
+    border: none;
+    font-size: 12px;
+    font-weight: 700;
+    cursor: pointer;
+    transition: all 0.15s;
+    text-align: center;
+    letter-spacing: 0.2px;
+  }
+
+  .btn:active { transform: scale(0.97); }
+
+  .btn-primary {
+    background: linear-gradient(135deg, #2563eb, #1d4ed8);
+    color: #fff;
+    box-shadow: 0 2px 8px rgba(37,99,235,0.35);
+  }
+
+  .btn-secondary {
+    background: #f1f5f9;
+    color: #475569;
+    border: 1px solid #e2e8f0;
+    flex: 0.7;
+  }
+
+  .btn-mapa {
+    background: #f0fdf4;
+    color: #16a34a;
+    border: 1px solid #bbf7d0;
+    flex: 0.75;
+    font-size: 11px;
+  }
+
+  .btn-tomar {
+    background: linear-gradient(135deg, #22c55e, #16a34a);
+    color: #fff;
+    box-shadow: 0 2px 8px rgba(34,197,94,0.35);
+  }
+
+  .btn-enruta {
+    background: linear-gradient(135deg, #f59e0b, #d97706);
+    color: #fff;
+    box-shadow: 0 2px 8px rgba(245,158,11,0.3);
+  }
+
+  .btn-llegue {
+    background: linear-gradient(135deg, #6366f1, #4f46e5);
+    color: #fff;
+    box-shadow: 0 2px 8px rgba(99,102,241,0.35);
+  }
+
+  .btn-danger {
+    background: #fef2f2;
+    color: #dc2626;
+    border: 1px solid #fca5a5;
+    flex: 0.7;
+    font-size: 11px;
+  }
+
+  /* ──────── RUTA VIEW ──────── */
+  .ruta-header {
+    background: linear-gradient(135deg, #1e3a8a, #1d4ed8);
+    border-radius: 12px;
+    padding: 12px 14px;
+    margin-bottom: 10px;
+    border: 1px solid rgba(255,255,255,0.08);
+  }
+
+  .ruta-title {
+    color: #fff;
+    font-size: 13px;
+    font-weight: 700;
+    margin-bottom: 6px;
+  }
+
+  .ruta-meta {
+    display: flex;
+    gap: 10px;
+  }
+
+  .ruta-chip {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    background: rgba(255,255,255,0.1);
+    border-radius: 6px;
+    padding: 3px 8px;
+    font-size: 10px;
+    font-weight: 600;
+    color: rgba(255,255,255,0.8);
+  }
+
+  .stop-card {
+    background: #fff;
+    border-radius: 12px;
+    margin-bottom: 8px;
+    border: 1px solid #e8edf2;
+    overflow: hidden;
+    display: flex;
+    box-shadow: 0 1px 4px rgba(0,0,0,0.05);
+  }
+
+  .stop-num {
+    width: 38px;
+    background: #1e3a8a;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 16px;
+    font-weight: 800;
+    color: #fff;
+    flex-shrink: 0;
+    font-variant-numeric: tabular-nums;
+  }
+
+  .stop-body {
+    flex: 1;
+    padding: 9px 11px;
+  }
+
+  .stop-ref {
+    font-size: 12px;
+    font-weight: 700;
+    color: #1e293b;
+    margin-bottom: 2px;
+  }
+
+  .stop-address {
+    font-size: 10px;
+    color: #64748b;
+    margin-bottom: 5px;
+  }
+
+  .stop-actions {
+    display: flex;
+    gap: 5px;
+  }
+
+  .btn-sm {
+    padding: 5px 9px;
+    border-radius: 6px;
+    font-size: 10px;
+    font-weight: 700;
+    border: none;
+    cursor: pointer;
+  }
+
+  .btn-sm-green { background: #f0fdf4; color: #15803d; border: 1px solid #bbf7d0; }
+  .btn-sm-blue  { background: #eff6ff; color: #2563eb; border: 1px solid #bfdbfe; }
+
+  .stop-card.done .stop-num {
+    background: #16a34a;
+  }
+
+  .stop-card.done .stop-ref {
+    text-decoration: line-through;
+    color: #94a3b8;
+  }
+
+  .stop-card.active-stop .stop-num {
+    background: #f59e0b;
+    animation: pulse-card 2s ease-in-out infinite;
+  }
+
+  @keyframes pulse-card {
+    0%, 100% { background: #f59e0b; }
+    50% { background: #d97706; }
+  }
+
+  /* ──────── MI DÍA VIEW ──────── */
+  .dia-section {
+    margin-bottom: 12px;
+  }
+
+  .dia-card {
+    background: #fff;
+    border-radius: 12px;
+    border: 1px solid #e8edf2;
+    overflow: hidden;
+    box-shadow: 0 1px 4px rgba(0,0,0,0.05);
+  }
+
+  .dia-card-header {
+    padding: 10px 14px 8px;
+    border-bottom: 1px solid #f1f5f9;
+  }
+
+  .dia-card-title {
+    font-size: 11px;
+    font-weight: 700;
+    color: #64748b;
+    text-transform: uppercase;
+    letter-spacing: 0.8px;
+  }
+
+  .progreso-wrap {
+    padding: 12px 14px;
+  }
+
+  .progreso-num {
+    display: flex;
+    justify-content: space-between;
+    align-items: baseline;
+    margin-bottom: 8px;
+  }
+
+  .progreso-main {
+    font-size: 28px;
+    font-weight: 800;
+    color: #1e293b;
+  }
+
+  .progreso-total {
+    font-size: 13px;
+    color: #94a3b8;
+    font-weight: 600;
+  }
+
+  .progreso-bar-wrap {
+    background: #f1f5f9;
+    border-radius: 8px;
+    height: 10px;
+    overflow: hidden;
+    margin-bottom: 6px;
+  }
+
+  .progreso-bar {
+    height: 100%;
+    background: linear-gradient(90deg, #2563eb, #6366f1);
+    border-radius: 8px;
+    transition: width 0.5s ease;
+  }
+
+  .progreso-label {
+    font-size: 10px;
+    color: #94a3b8;
+    font-weight: 600;
+    text-align: right;
+  }
+
+  .kpi-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 8px;
+    padding: 10px 10px;
+  }
+
+  .kpi-item {
+    background: #f8fafc;
+    border-radius: 10px;
+    padding: 10px 12px;
+    border: 1px solid #e2e8f0;
+  }
+
+  .kpi-val {
+    font-size: 22px;
+    font-weight: 800;
+    color: #1e293b;
+    line-height: 1;
+  }
+
+  .kpi-lab {
+    font-size: 10px;
+    color: #64748b;
+    font-weight: 600;
+    margin-top: 3px;
+  }
+
+  .kpi-item.blue .kpi-val  { color: #2563eb; }
+  .kpi-item.green .kpi-val { color: #16a34a; }
+  .kpi-item.amber .kpi-val { color: #d97706; }
+  .kpi-item.purple .kpi-val{ color: #7c3aed; }
+
+  .turno-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 10px 14px;
+    border-top: 1px solid #f1f5f9;
+  }
+
+  .turno-label { font-size: 11px; color: #64748b; font-weight: 600; }
+  .turno-value { font-size: 12px; color: #1e293b; font-weight: 700; }
+
+  .estado-moto-row {
+    padding: 10px 14px;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    cursor: pointer;
+  }
+
+  .estado-moto-dot {
+    width: 10px;
+    height: 10px;
+    border-radius: 50%;
+    background: #22c55e;
+    box-shadow: 0 0 8px rgba(34,197,94,0.5);
+    flex-shrink: 0;
+  }
+
+  .estado-moto-info { flex: 1; }
+
+  .estado-moto-label {
+    font-size: 12px;
+    font-weight: 700;
+    color: #1e293b;
+  }
+
+  .estado-moto-sub {
+    font-size: 10px;
+    color: #64748b;
+    margin-top: 1px;
+  }
+
+  .estado-moto-arrow {
+    color: #94a3b8;
+    font-size: 14px;
+  }
+
+  .logout-btn {
+    width: 100%;
+    padding: 12px;
+    background: #fef2f2;
+    border: 1px solid #fecaca;
+    border-radius: 12px;
+    color: #dc2626;
+    font-size: 13px;
+    font-weight: 700;
+    cursor: pointer;
+    text-align: center;
+    margin-top: 4px;
+    transition: background 0.15s;
+  }
+
+  .logout-btn:hover { background: #fee2e2; }
+
+  /* ──────── BOTTOM NAV ──────── */
+  .bottom-nav {
+    background: #fff;
+    border-top: 1px solid #e2e8f0;
+    display: flex;
+    flex-shrink: 0;
+    padding: 8px 0 20px;
+    box-shadow: 0 -4px 20px rgba(0,0,0,0.06);
+  }
+
+  .nav-item {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 3px;
+    padding: 6px 4px;
+    cursor: pointer;
+    border: none;
+    background: none;
+    transition: all 0.15s;
+    position: relative;
+  }
+
+  .nav-item.active .nav-icon { filter: none; opacity: 1; }
+  .nav-item .nav-icon {
+    font-size: 22px;
+    opacity: 0.35;
+    transition: all 0.15s;
+  }
+
+  .nav-item.active .nav-icon { opacity: 1; }
+
+  .nav-label {
+    font-size: 9px;
+    font-weight: 700;
+    color: #94a3b8;
+    letter-spacing: 0.4px;
+    text-transform: uppercase;
+    transition: color 0.15s;
+  }
+
+  .nav-item.active .nav-label { color: #2563eb; }
+
+  .nav-indicator {
+    position: absolute;
+    top: -1px;
+    left: 50%;
+    transform: translateX(-50%);
+    width: 28px;
+    height: 3px;
+    background: #2563eb;
+    border-radius: 0 0 4px 4px;
+    opacity: 0;
+    transition: opacity 0.15s;
+  }
+
+  .nav-item.active .nav-indicator { opacity: 1; }
+
+  .nav-badge {
+    position: absolute;
+    top: 4px;
+    right: 18px;
+    background: #ef4444;
+    color: #fff;
+    font-size: 8px;
+    font-weight: 800;
+    border-radius: 8px;
+    padding: 1px 4px;
+    min-width: 14px;
+    text-align: center;
+    line-height: 12px;
+  }
+
+  /* ──────── COMPLETADOS COLLAPSIBLE ──────── */
+  .completados-body {
+    overflow: hidden;
+    transition: max-height 0.35s ease;
+    max-height: 0;
+  }
+
+  .completados-body.open {
+    max-height: 600px;
+  }
+
+  /* ──────── EMPTY STATE ──────── */
+  .empty-state {
+    text-align: center;
+    padding: 32px 16px;
+    color: #94a3b8;
+  }
+
+  .empty-icon { font-size: 36px; margin-bottom: 8px; }
+  .empty-text { font-size: 13px; font-weight: 600; }
+  .empty-sub  { font-size: 11px; margin-top: 4px; color: #cbd5e1; }
+
+  /* ──────── TAB CONTENT ──────── */
+  .tab-content { display: none; }
+  .tab-content.active { display: block; }
+
+  /* ──────── NOTA SDUI ──────── */
+  .sdui-legend {
+    width: 393px;
+    margin-top: 24px;
+    background: #16213e;
+    border-radius: 14px;
+    padding: 16px 18px;
+    border: 1px solid #1a2f5e;
+  }
+
+  .sdui-legend h2 {
+    color: #60a5fa;
+    font-size: 13px;
+    font-weight: 700;
+    margin-bottom: 10px;
+    letter-spacing: 0.5px;
+  }
+
+  .sdui-row {
+    display: flex;
+    align-items: flex-start;
+    gap: 8px;
+    margin-bottom: 8px;
+    font-size: 11px;
+  }
+
+  .sdui-dot {
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    background: #3b82f6;
+    margin-top: 4px;
+    flex-shrink: 0;
+  }
+
+  .sdui-row span { color: #94a3b8; line-height: 1.5; }
+  .sdui-row strong { color: #e2e8f0; }
+
+</style>
+</head>
+<body>
+
+<h1>SGLab Motorizado · Mockup v2</h1>
+
+<div class="phone-wrap">
+  <div class="dynamic-island"></div>
+
+  <div class="phone-frame">
+
+    <!-- STATUS BAR -->
+    <div class="status-bar">
+      <span class="status-time">9:41</span>
+      <div class="status-icons">
+        <span>●●●</span>
+        <span>WiFi</span>
+        <span>🔋</span>
+      </div>
+    </div>
+
+    <!-- HEADER -->
+    <div class="header">
+      <div class="header-top">
+        <div class="moto-info">
+          <div class="avatar">🏍</div>
+          <div>
+            <div class="moto-name">Carlos Ramírez</div>
+            <div class="moto-plate">ABC-123 · Moto</div>
+          </div>
+        </div>
+        <div class="gps-badge">
+          <div class="gps-dot"></div>
+          <span class="gps-text">GPS activo</span>
+        </div>
+      </div>
+
+      <div class="stats-row">
+        <div class="stat-card">
+          <div class="stat-value">2</div>
+          <div class="stat-label">En curso</div>
+        </div>
+        <div class="stat-card green">
+          <div class="stat-value">5</div>
+          <div class="stat-label">Completados</div>
+        </div>
+        <div class="stat-card amber">
+          <div class="stat-value">S/ 84</div>
+          <div class="stat-label">Cobrado</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- INNER TABS (Pendientes / Mi Ruta) -->
+    <div class="inner-tabs" id="innerTabBar">
+      <button class="inner-tab active" onclick="switchInner('pendientes', this)">
+        Disponibles
+        <span class="badge">3</span>
+      </button>
+      <button class="inner-tab" onclick="switchInner('enruta', this)">
+        Mi Ruta
+        <span class="badge" style="background:#f59e0b">2</span>
+      </button>
+    </div>
+
+    <!-- SCROLL CONTENT -->
+    <div class="scroll-content" id="mainScroll">
+
+      <!-- ===== TAB: PENDIENTES ===== -->
+      <div class="tab-content active" id="tab-pendientes">
+
+        <!-- DISPONIBLES (para tomar) -->
+        <div class="section-header" style="margin-top:2px">
+          <span class="section-title">Disponibles para tomar</span>
+          <span class="section-count">3</span>
+        </div>
+
+        <!-- CARD 1: URGENTE -->
+        <div class="ticket-card">
+          <div class="card-strip urgente"></div>
+          <div class="card-body">
+            <div class="card-top">
+              <div class="card-meta">
+                <div class="ticket-code">TKT-0041 <span class="ticket-time">· 9:15 AM</span></div>
+              </div>
+              <div class="ticket-badges">
+                <span class="badge badge-urgente">🔴 URGENTE</span>
+                <span class="badge badge-pendiente">PENDIENTE</span>
+              </div>
+            </div>
+
+            <div class="card-ref">
+              <span class="ref-icon">🏥</span>
+              <div>
+                <div class="ref-name">Clínica San Marcos</div>
+                <div class="ref-address">Av. Benavides 4890, Surco · 2.1 km</div>
+              </div>
+            </div>
+
+            <div class="card-muestra">
+              <span class="muestra-ic">🧪</span>
+              <span class="muestra-text">Sangre · 3 muestras</span>
+              <span class="muestra-sep">·</span>
+              <span class="hora-limit">⏰ 10:30 AM</span>
+            </div>
+
+            <div class="card-actions">
+              <button class="btn btn-mapa">📍 Cómo llegar</button>
+              <button class="btn btn-tomar">Tomar pedido →</button>
+            </div>
+          </div>
+        </div>
+
+        <!-- CARD 2: NORMAL -->
+        <div class="ticket-card">
+          <div class="card-strip normal"></div>
+          <div class="card-body">
+            <div class="card-top">
+              <div class="card-meta">
+                <div class="ticket-code">TKT-0039 <span class="ticket-time">· 8:47 AM</span></div>
+              </div>
+              <div class="ticket-badges">
+                <span class="badge badge-normal">NORMAL</span>
+                <span class="badge badge-pendiente">PENDIENTE</span>
+              </div>
+            </div>
+
+            <div class="card-ref">
+              <span class="ref-icon">🏢</span>
+              <div>
+                <div class="ref-name">Laboratorio Alfa</div>
+                <div class="ref-address">Jr. Huallaga 332, Cercado · 4.5 km</div>
+              </div>
+            </div>
+
+            <div class="card-muestra">
+              <span class="muestra-ic">🧬</span>
+              <span class="muestra-text">Orina · 1 muestra</span>
+              <span class="muestra-sep">·</span>
+              <span class="hora-limit ok">⏰ 12:00 PM</span>
+            </div>
+
+            <div class="card-actions">
+              <button class="btn btn-mapa">📍 Cómo llegar</button>
+              <button class="btn btn-tomar">Tomar pedido →</button>
+            </div>
+          </div>
+        </div>
+
+        <!-- CARD 3: NORMAL -->
+        <div class="ticket-card">
+          <div class="card-strip normal"></div>
+          <div class="card-body">
+            <div class="card-top">
+              <div class="card-meta">
+                <div class="ticket-code">TKT-0037 <span class="ticket-time">· 8:20 AM</span></div>
+              </div>
+              <div class="ticket-badges">
+                <span class="badge badge-normal">NORMAL</span>
+                <span class="badge badge-pendiente">PENDIENTE</span>
+              </div>
+            </div>
+
+            <div class="card-ref">
+              <span class="ref-icon">🏪</span>
+              <div>
+                <div class="ref-name">Farmacia Sana Vida</div>
+                <div class="ref-address">Av. Arequipa 2156, Lince · 3.8 km</div>
+              </div>
+            </div>
+
+            <div class="card-muestra">
+              <span class="muestra-ic">🧪</span>
+              <span class="muestra-text">Heces · 2 muestras</span>
+              <span class="muestra-sep">·</span>
+              <span class="hora-limit ok">⏰ 1:00 PM</span>
+            </div>
+
+            <div class="card-actions">
+              <button class="btn btn-mapa">📍 Cómo llegar</button>
+              <button class="btn btn-tomar">Tomar pedido →</button>
+            </div>
+          </div>
+        </div>
+
+        <!-- COMPLETADOS collapsible -->
+        <div style="margin-top:4px">
+          <div class="section-header">
+            <span class="section-title">Completados hoy</span>
+            <button class="section-toggle" onclick="toggleCompletados(this)">
+              Ver (5) <span class="toggle-arrow" id="completados-arrow">▼</span>
+            </button>
+          </div>
+
+          <div class="completados-body" id="completados-body">
+            <!-- done card -->
+            <div class="ticket-card">
+              <div class="card-strip done"></div>
+              <div class="card-body">
+                <div class="card-top">
+                  <div class="card-meta">
+                    <div class="ticket-code">TKT-0033 <span class="ticket-time">· 7:05 AM</span></div>
+                  </div>
+                  <div class="ticket-badges">
+                    <span class="badge badge-cerrado">✓ CERRADO</span>
+                  </div>
+                </div>
+                <div class="card-ref">
+                  <span class="ref-icon">🏥</span>
+                  <div>
+                    <div class="ref-name" style="color:#94a3b8;text-decoration:line-through">Centro Médico Lima</div>
+                    <div class="ref-address">Av. Javier Prado 1234, San Isidro</div>
+                  </div>
+                </div>
+                <div style="display:flex;justify-content:space-between;align-items:center;margin-top:4px">
+                  <span style="font-size:10px;color:#16a34a;font-weight:700">✓ Entregado 7:48 AM</span>
+                  <span style="font-size:10px;color:#64748b;font-weight:600">S/ 25.00 · YAPE</span>
+                </div>
+              </div>
+            </div>
+
+            <div class="ticket-card">
+              <div class="card-strip done"></div>
+              <div class="card-body">
+                <div class="card-top">
+                  <div class="card-meta">
+                    <div class="ticket-code">TKT-0030 <span class="ticket-time">· 6:30 AM</span></div>
+                  </div>
+                  <div class="ticket-badges">
+                    <span class="badge badge-cerrado">✓ CERRADO</span>
+                  </div>
+                </div>
+                <div class="card-ref">
+                  <span class="ref-icon">🏢</span>
+                  <div>
+                    <div class="ref-name" style="color:#94a3b8;text-decoration:line-through">Policlínico Norte</div>
+                    <div class="ref-address">Jr. Tacna 456, Miraflores</div>
+                  </div>
+                </div>
+                <div style="display:flex;justify-content:space-between;align-items:center;margin-top:4px">
+                  <span style="font-size:10px;color:#16a34a;font-weight:700">✓ Entregado 7:01 AM</span>
+                  <span style="font-size:10px;color:#64748b;font-weight:600">S/ 18.00 · EFECTIVO</span>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+      </div>
+      <!-- ===== FIN TAB PENDIENTES ===== -->
+
+
+      <!-- ===== TAB: MI RUTA ===== -->
+      <div class="tab-content" id="tab-enruta">
+
+        <div class="ruta-header">
+          <div class="ruta-title">🗺 Ruta activa del día</div>
+          <div class="ruta-meta">
+            <span class="ruta-chip">📦 2 pendientes</span>
+            <span class="ruta-chip">✓ 5 completos</span>
+            <span class="ruta-chip">~12 km</span>
+          </div>
+        </div>
+
+        <!-- Parada EN CURSO -->
+        <div class="section-header">
+          <span class="section-title">En curso</span>
+          <span class="section-count">2</span>
+        </div>
+
+        <div class="stop-card active-stop">
+          <div class="stop-num">1</div>
+          <div class="stop-body">
+            <div class="stop-ref">Clínica San Marcos</div>
+            <div class="stop-address">Av. Benavides 4890, Surco · En camino</div>
+            <div class="stop-actions">
+              <button class="btn-sm btn-sm-green">📍 Cómo llegar</button>
+              <button class="btn-sm btn-sm-blue">Llegué al punto</button>
+            </div>
+          </div>
+        </div>
+
+        <div class="stop-card">
+          <div class="stop-num" style="background:#64748b">2</div>
+          <div class="stop-body">
+            <div class="stop-ref">Laboratorio Alfa</div>
+            <div class="stop-address">Jr. Huallaga 332, Cercado · Siguiente</div>
+            <div class="stop-actions">
+              <button class="btn-sm btn-sm-green">📍 Ver en mapa</button>
+            </div>
+          </div>
+        </div>
+
+        <!-- Completados -->
+        <div class="section-header" style="margin-top:8px">
+          <span class="section-title">Completados</span>
+          <button class="section-toggle" onclick="toggleRutaDone(this)">
+            Ver (5) <span class="toggle-arrow">▼</span>
+          </button>
+        </div>
+
+        <div class="completados-body" id="ruta-done-body">
+          <div class="stop-card done">
+            <div class="stop-num">✓</div>
+            <div class="stop-body">
+              <div class="stop-ref">Centro Médico Lima</div>
+              <div class="stop-address">Entregado a las 7:48 AM · S/ 25.00</div>
+            </div>
+          </div>
+          <div class="stop-card done">
+            <div class="stop-num">✓</div>
+            <div class="stop-body">
+              <div class="stop-ref">Policlínico Norte</div>
+              <div class="stop-address">Entregado a las 7:01 AM · S/ 18.00</div>
+            </div>
+          </div>
+          <div class="stop-card done">
+            <div class="stop-num">✓</div>
+            <div class="stop-body">
+              <div class="stop-ref">Farmacia Sana Vida</div>
+              <div class="stop-address">Entregado a las 6:22 AM · S/ 12.00</div>
+            </div>
+          </div>
+        </div>
+
+      </div>
+      <!-- ===== FIN TAB MI RUTA ===== -->
+
+
+      <!-- ===== TAB: MI DÍA ===== -->
+      <div class="tab-content" id="tab-dia">
+
+        <!-- Progreso del turno -->
+        <div class="dia-section">
+          <div class="dia-card">
+            <div class="dia-card-header">
+              <div class="dia-card-title">Progreso del turno</div>
+            </div>
+            <div class="progreso-wrap">
+              <div class="progreso-num">
+                <span class="progreso-main">5</span>
+                <span class="progreso-total">de 7 tickets</span>
+              </div>
+              <div class="progreso-bar-wrap">
+                <div class="progreso-bar" style="width:71%"></div>
+              </div>
+              <div class="progreso-label">71% completado</div>
+            </div>
+            <div class="turno-row">
+              <span class="turno-label">Inicio turno</span>
+              <span class="turno-value">6:00 AM</span>
+            </div>
+            <div class="turno-row" style="border-top:1px solid #f1f5f9">
+              <span class="turno-label">Tiempo activo</span>
+              <span class="turno-value">3h 41m</span>
+            </div>
+          </div>
+        </div>
+
+        <!-- KPIs -->
+        <div class="dia-section">
+          <div class="dia-card">
+            <div class="dia-card-header">
+              <div class="dia-card-title">Resumen del día</div>
+            </div>
+            <div class="kpi-grid">
+              <div class="kpi-item blue">
+                <div class="kpi-val">7</div>
+                <div class="kpi-lab">Total asignados</div>
+              </div>
+              <div class="kpi-item green">
+                <div class="kpi-val">5</div>
+                <div class="kpi-lab">Completados</div>
+              </div>
+              <div class="kpi-item amber">
+                <div class="kpi-val">S/84</div>
+                <div class="kpi-lab">Total cobrado</div>
+              </div>
+              <div class="kpi-item purple">
+                <div class="kpi-val">38m</div>
+                <div class="kpi-lab">Tpo. prom./ticket</div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Estado motorizado -->
+        <div class="dia-section">
+          <div class="dia-card">
+            <div class="dia-card-header">
+              <div class="dia-card-title">Mi estado</div>
+            </div>
+            <div class="estado-moto-row">
+              <div class="estado-moto-dot"></div>
+              <div class="estado-moto-info">
+                <div class="estado-moto-label">Disponible</div>
+                <div class="estado-moto-sub">Activo · GPS transmitiendo</div>
+              </div>
+              <span class="estado-moto-arrow">›</span>
+            </div>
+            <div class="turno-row">
+              <span class="turno-label">Placa vehículo</span>
+              <span class="turno-value">ABC-123</span>
+            </div>
+            <div class="turno-row" style="border-top:1px solid #f1f5f9">
+              <span class="turno-label">Tickets activos</span>
+              <span class="turno-value">2</span>
+            </div>
+          </div>
+        </div>
+
+        <!-- Logout -->
+        <div class="dia-section">
+          <button class="logout-btn">Cerrar sesión</button>
+        </div>
+
+      </div>
+      <!-- ===== FIN TAB MI DÍA ===== -->
+
+    </div>
+    <!-- fin scroll-content -->
+
+    <!-- BOTTOM NAV -->
+    <div class="bottom-nav">
+
+      <button class="nav-item active" id="nav-recojos" onclick="switchBottomTab('recojos', this)">
+        <div class="nav-indicator"></div>
+        <span class="nav-icon">📋</span>
+        <span class="nav-label">Recojos</span>
+        <span class="nav-badge">3</span>
+      </button>
+
+      <button class="nav-item" id="nav-ruta" onclick="switchBottomTab('ruta', this)">
+        <div class="nav-indicator"></div>
+        <span class="nav-icon">🗺</span>
+        <span class="nav-label">Mi Ruta</span>
+      </button>
+
+      <button class="nav-item" id="nav-dia" onclick="switchBottomTab('dia', this)">
+        <div class="nav-indicator"></div>
+        <span class="nav-icon">📊</span>
+        <span class="nav-label">Mi Día</span>
+      </button>
+
+    </div>
+
+  </div>
+  <!-- fin phone-frame -->
+</div>
+<!-- fin phone-wrap -->
+
+
+<!-- ──────── LEYENDA SDUI ──────── -->
+<div class="sdui-legend">
+  <h2>🔧 ¿Qué controla el backend sin rebuild?</h2>
+
+  <div class="sdui-row">
+    <div class="sdui-dot" style="background:#22c55e"></div>
+    <span><strong>Colores y paleta completa</strong> — azules, verdes, rojos, bordes, badges, strips, botones. Cambiás un hex en BD y al recargar ya aparece.</span>
+  </div>
+  <div class="sdui-row">
+    <div class="sdui-dot" style="background:#22c55e"></div>
+    <span><strong>Textos de UI</strong> — labels de tabs, botones ("Tomar pedido"), estados, secciones ("Disponibles para tomar"), logout, hechoLabel.</span>
+  </div>
+  <div class="sdui-row">
+    <div class="sdui-dot" style="background:#22c55e"></div>
+    <span><strong>Show/hide secciones</strong> — showStats, showGpsStatus, showEstadoPill, showTimeLimit, showNotas, showRegistroModal, mostrar/ocultar tabs completos.</span>
+  </div>
+  <div class="sdui-row">
+    <div class="sdui-dot" style="background:#22c55e"></div>
+    <span><strong>Estados del motorizado</strong> — íconos, labels, descripciones, colores de fondo del badge GPS (DISPONIBLE / EN_REFRIGERIO / OFFLINE).</span>
+  </div>
+  <div class="sdui-row">
+    <div class="sdui-dot" style="background:#22c55e"></div>
+    <span><strong>Opciones de pago</strong> — agregar/quitar YAPE, PLIN, TRANSFERENCIA sin rebuild.</span>
+  </div>
+  <div class="sdui-row">
+    <div class="sdui-dot" style="background:#22c55e"></div>
+    <span><strong>Flujo de tickets</strong> — qué estado mapea a qué sección, label y color de cada botón de acción por estado.</span>
+  </div>
+  <div class="sdui-row">
+    <div class="sdui-dot" style="background:#f59e0b"></div>
+    <span><strong>Hora de creación · botón mapa</strong> — <em>ya en el mockup</em>, se controla desde uiLabels si mostrar o no el timestamp y qué URL de mapas usar (Google Maps / Waze deeplink).</span>
+  </div>
+  <div class="sdui-row">
+    <div class="sdui-dot" style="background:#ef4444"></div>
+    <span><strong>NO controlable sin rebuild</strong> — lógica de negocio hardcodeada en CLIENT_FLOW_MAP, estructura de componentes/layouts, navegación entre pantallas, permisos de cámara/GPS.</span>
+  </div>
+</div>
+
+<script>
+  /* ── Inner tabs (Pendientes / Mi Ruta dentro de tab Recojos) ── */
+  function switchInner(tab, btn) {
+    document.querySelectorAll('.inner-tab').forEach(b => b.classList.remove('active'));
+    btn.classList.add('active');
+
+    const allTabs = ['pendientes', 'enruta'];
+    allTabs.forEach(t => {
+      const el = document.getElementById('tab-' + t);
+      if (el) el.classList.remove('active');
+    });
+    const target = document.getElementById('tab-' + tab);
+    if (target) target.classList.add('active');
+  }
+
+  /* ── Bottom navigation ── */
+  function switchBottomTab(tab, btn) {
+    // Limpiar nav items
+    document.querySelectorAll('.nav-item').forEach(b => b.classList.remove('active'));
+    btn.classList.add('active');
+
+    // Mostrar/ocultar inner tabs
+    const innerTabBar = document.getElementById('innerTabBar');
+
+    // Ocultar todos los tabs
+    ['pendientes', 'enruta', 'dia'].forEach(t => {
+      const el = document.getElementById('tab-' + t);
+      if (el) el.classList.remove('active');
+    });
+
+    if (tab === 'recojos') {
+      innerTabBar.style.display = 'flex';
+      // Mostrar el inner tab activo (el que esté seleccionado)
+      const activeInner = document.querySelector('.inner-tab.active');
+      const activeTab = activeInner ? (activeInner.textContent.trim().startsWith('Disp') ? 'pendientes' : 'enruta') : 'pendientes';
+      const el = document.getElementById('tab-' + activeTab);
+      if (el) el.classList.add('active');
+    } else if (tab === 'ruta') {
+      innerTabBar.style.display = 'none';
+      document.getElementById('tab-enruta').classList.add('active');
+    } else if (tab === 'dia') {
+      innerTabBar.style.display = 'none';
+      document.getElementById('tab-dia').classList.add('active');
+    }
+  }
+
+  /* ── Toggle completados ── */
+  function toggleCompletados(btn) {
+    const body = document.getElementById('completados-body');
+    const arrow = document.getElementById('completados-arrow');
+    const isOpen = body.classList.contains('open');
+    body.classList.toggle('open', !isOpen);
+    arrow.classList.toggle('open', !isOpen);
+    btn.querySelector('.toggle-arrow').classList.toggle('open', !isOpen);
+    // Update text
+    const countSpan = btn.childNodes[0];
+    btn.innerHTML = isOpen
+      ? 'Ver (5) <span class="toggle-arrow" id="completados-arrow">▼</span>'
+      : 'Ocultar <span class="toggle-arrow open" id="completados-arrow">▼</span>';
+  }
+
+  function toggleRutaDone(btn) {
+    const body = document.getElementById('ruta-done-body');
+    const isOpen = body.classList.contains('open');
+    body.classList.toggle('open', !isOpen);
+    const arrow = btn.querySelector('.toggle-arrow');
+    arrow.classList.toggle('open', !isOpen);
+    btn.innerHTML = isOpen
+      ? 'Ver (5) <span class="toggle-arrow">▼</span>'
+      : 'Ocultar <span class="toggle-arrow open">▼</span>';
+  }
+
+  /* ── Reloj en tiempo real ── */
+  function updateClock() {
+    const now = new Date();
+    const h = now.getHours().toString().padStart(2, '0');
+    const m = now.getMinutes().toString().padStart(2, '0');
+    document.querySelector('.status-time').textContent = h + ':' + m;
+  }
+  updateClock();
+  setInterval(updateClock, 10000);
+</script>
+
+</body>
+</html>
