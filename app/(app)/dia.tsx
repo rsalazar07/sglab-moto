@@ -74,24 +74,23 @@ export default function DiaScreen() {
     console.log('[DIA LOGOUT] Botón presionado');
     Alert.alert('Cerrar sesión', '¿Seguro que quieres cerrar sesión?', [
       { text: 'Cancelar', style: 'cancel' },
-      { text: 'Salir', style: 'destructive', onPress: async () => {
+      { text: 'Salir', style: 'destructive', onPress: () => {
         console.log('[DIA LOGOUT] Confirmó salida');
-        try {
-          console.log('[DIA LOGOUT] Forzando stop tracking');
-          await forceStopAllTracking();
-          deactivateKeepAwake();
-          disconnectSocket();
-          try { await api.patch('/motorizados/me/estado', { estado: 'OFFLINE' }); } catch (e) { log('WARN', 'dia', 'Error estado OFFLOAD: ' + String(e)); }
-          console.log('[DIA LOGOUT] Llamando authApi.logout()');
-          try { await authApi.logout(); } catch (e) { console.error('[DIA LOGOUT] Error API:', e); log('WARN', 'logout', String(e)); }
-          console.log('[DIA LOGOUT] clearUser()');
-          clearUser();
-          setTimeout(() => router.replace('/login'), 100);
-        } catch (e) {
-          console.error('[DIA LOGOUT] Error INESPERADO:', e);
-          clearUser();
-          router.replace('/login');
-        }
+        // PRIMERO: limpiar estado y redirigir (inmediato, sin await)
+        clearUser();
+        router.replace('/login');
+        // DESPUÉS: tareas de limpieza en segundo plano
+        (async () => {
+          try {
+            await forceStopAllTracking();
+            deactivateKeepAwake();
+            disconnectSocket();
+            try { await api.patch('/motorizados/me/estado', { estado: 'OFFLINE' }); } catch (e) { log('WARN', 'dia', 'Error estado OFFLOAD: ' + String(e)); }
+            try { await authApi.logout(); } catch (e) { console.error('[DIA LOGOUT] Error API:', e); log('WARN', 'logout', String(e)); }
+          } catch (e) {
+            console.error('[DIA LOGOUT] Error limpieza:', e);
+          }
+        })();
       }},
     ]);
   };

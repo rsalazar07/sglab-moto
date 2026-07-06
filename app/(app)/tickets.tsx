@@ -275,23 +275,21 @@ export default function TicketsScreen() {
     console.log('[LOGOUT] Botón presionado');
     Alert.alert('Cerrar sesión', '¿Seguro que quieres salir?', [
       { text: 'Cancelar', style: 'cancel' },
-      { text: 'Salir', style: 'destructive', onPress: async () => {
+      { text: 'Salir', style: 'destructive', onPress: () => {
         console.log('[LOGOUT] Confirmó salida');
-        try {
-          if (turnoActivo) { console.log('[LOGOUT] Finalizando turno'); await finalizarTurno(); }
-          console.log('[LOGOUT] Desconectando socket');
-          disconnectSocket();
-          console.log('[LOGOUT] Llamando authApi.logout()');
-          try { await authApi.logout(); } catch (e) { console.error('[LOGOUT] Error en logout API:', e); log('ERROR', 'logout', String(e)); }
-          console.log('[LOGOUT] Ejecutando clearUser()');
-          clearUser();
-          console.log('[LOGOUT] Redirigiendo a login');
-          setTimeout(() => router.replace('/login'), 100);
-        } catch (e) {
-          console.error('[LOGOUT] Error INESPERADO en logout:', e);
-          clearUser();
-          router.replace('/login');
-        }
+        // PRIMERO: limpiar estado y redirigir (inmediato, sin await)
+        clearUser();
+        router.replace('/login');
+        // DESPUÉS: tareas de limpieza en segundo plano (no bloquean)
+        (async () => {
+          try {
+            if (turnoActivo) { console.log('[LOGOUT] Finalizando turno'); await finalizarTurno(); }
+            disconnectSocket();
+            try { await authApi.logout(); } catch (e) { console.error('[LOGOUT] Error API:', e); log('ERROR', 'logout', String(e)); }
+          } catch (e) {
+            console.error('[LOGOUT] Error limpieza:', e);
+          }
+        })();
       }},
     ]);
   };
