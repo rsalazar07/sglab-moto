@@ -7,7 +7,6 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { activateKeepAwakeAsync, deactivateKeepAwake } from 'expo-keep-awake';
 import * as ImagePicker from 'expo-image-picker';
-import * as FileSystem from 'expo-file-system';
 import { ticketsApi } from '../../src/api/tickets';
 import { useTracking } from '../../src/hooks/useTracking';
 import { useAuthStore } from '../../src/store/authStore';
@@ -382,16 +381,15 @@ export default function TicketsScreen() {
     if (!id) return;
     setSubiendo(true);
 
-    let fotoBase64: string | undefined;
+    let fotoUrl: string | undefined;
     if (fotoUri) {
       try {
-        fotoBase64 = await FileSystem.readAsStringAsync(fotoUri, {
-          encoding: FileSystem.EncodingType.Base64,
-        });
+        const result = await ticketsApi.subirEvidencia(id, fotoUri);
+        fotoUrl = result.url;
       } catch (e) {
-        console.error('[completarRecojo] Error leyendo foto:', e);
-        log('ERROR', 'completarRecojo', `leerFoto: ${e instanceof Error ? e.message : String(e)}`);
-        Alert.alert('Advertencia', 'No se pudo leer la foto. Se guardará el registro sin imagen.');
+        console.error('[completarRecojo] Error subiendo foto:', e);
+        log('ERROR', 'completarRecojo', `subirEvidencia: ${e instanceof Error ? e.message : String(e)}`);
+        Alert.alert('Advertencia', 'No se pudo subir la foto. Se guardará el registro sin imagen.');
       }
     }
 
@@ -417,7 +415,7 @@ export default function TicketsScreen() {
     } else if (refNombre || observaciones || fotoUri) {
       try {
         const body: any = { refNombre, observaciones };
-        if (fotoBase64) body.fotoBase64 = fotoBase64;
+        if (fotoUrl) body.fotoUrl = fotoUrl;
         await ticketsApi.guardarRegistro(id, body);
       } catch (e) {
         console.error('[completarRecojo] Error guardando registro:', e);
