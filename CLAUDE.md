@@ -1,107 +1,69 @@
-# SGLab Moto - App Android para Motorizados
+# SGLab Moto — App Motorizado
 
 ## Stack
-- **Framework:** Expo SDK 54 (React Native)
+- **App:** Expo SDK 54, React Native, TypeScript
 - **Router:** expo-router (file-based)
-- **Estado:** Zustand
-- **WebSocket:** socket.io-client
-- **Mapa:** react-native-maps
-- **Build:** GitHub Actions (APK arm64 gratuito)
+- **Estado:** Zustand (authStore)
+- **API:** Axios + interceptors (token refresh automático)
+- **Navegación:** Stack (root _layout.tsx) → Tabs (app/(app)/_layout.tsx)
+- **Auth:** JWT + refresh token, deviceId único por dispositivo
+- **Backend:** NestJS en /root/lablogix/apps/backend (puerto 8090)
+- **Build:** EAS Build via GitHub Actions (rsalazar07/sglab-moto)
 
-## Estructura del proyecto
-```
-/home/sglab-moto/
-  app/
-    (app)/            → rutas principales
-      tickets.tsx     → pantalla principal de tickets (motorizado)
-      dia.tsx         → resumen del día
-      _layout.tsx     → layout protegido (NO MODIFICAR)
-    _layout.tsx       → layout raíz (NO MODIFICAR)
-    index.tsx         → splash/redirección (NO MODIFICAR)
-    login.tsx         → login (NO MODIFICAR)
-  src/
-    api/              → llamadas API
-      client.ts       → axios instance (NO MODIFICAR)
-      tickets.ts      → tickets API calls
-      auth.ts         → auth API (NO MODIFICAR)
-    store/
-      authStore.ts    → zustand auth store (NO MODIFICAR)
-    hooks/
-      useTracking.ts  → GPS tracking (NO MODIFICAR)
-    socket/
-      socket.ts       → WebSocket (NO MODIFICAR)
-    types/            → TypeScript types
-```
+## Archivos Clave
 
-## Repositorio
-- URL: https://github.com/rsalazar07/sglab-moto
-- Branch: `master`
-- Build APK: disparar con `workflow_dispatch` en GitHub Actions
-- APK ≈ 39MB, disponible en Artifacts del workflow
+### App (Expo)
+| Archivo | Propósito |
+|---------|-----------|
+| `app/_layout.tsx` | Root layout: ErrorBoundary, splash, auth init, redirige a /login si no autenticado |
+| `app/(app)/_layout.tsx` | Tab layout: Tabs (Recojos + Mi día), redirige a /login si no autenticado |
+| `app/(app)/tickets.tsx` | Pantalla de tickets: lista, filtros, logout, modal de registro de recojo, fotos |
+| `app/(app)/dia.tsx` | Pantalla "Mi día": resumen, progreso, datos motorizado, botón cerrar sesión |
+| `app/login.tsx` | Pantalla de login |
+| `src/api/auth.ts` | Auth API: login, logout, me, deviceId |
+| `src/api/client.ts` | Axios instance con interceptors: token en headers, refresh automático en 401 |
+| `src/api/tickets.ts` | Tickets API: getMisTickets, updateEstado, tomarTicket, subirEvidencia, guardarRegistro, registrarCobro |
+| `src/hooks/useTracking.ts` | Hook de GPS tracking: foreground + background, AppState listener, BackgroundFetch |
+| `src/store/authStore.ts` | Zustand store: user, isAuthenticated, setUser, clearUser |
+| `src/socket/socket.ts` | WebSocket (Socket.IO) |
+| `src/lib/crashReport.ts` | Crash handler global (escribe logs a archivo) |
+| `src/lib/LogReporter.ts` | Logger que manda logs al endpoint /logs/device del backend |
 
-## API
-- Base URL: `https://recojossglab.duckdns.org/api`
-- WebSocket: `wss://recojossglab.duckdns.org`
-- Endpoints usados:
-  - GET /api/tickets — lista tickets (PENDIENTE + asignados)
-  - POST /api/tickets/:id/tomar — tomar ticket
-  - POST /api/tickets/:id/cambiar-estado — avanzar estado
-  - POST /api/tickets/:id/evidencia — subir foto
-  - POST /api/tickets/:id/registro — guardar registro de recojo
-  - POST /api/tickets/:id/cobro — registrar pago
-  - POST /api/auth/login — login con deviceId
-  - PATCH /api/motorizados/me/estado — cambiar estado (DISPONIBLE/EN_REFRIGERIO/OFFLINE)
-  - GET /api/tracking/me — obtener tracking
+### Backend (NestJS)
+| Archivo | Propósito |
+|---------|-----------|
+| `apps/backend/src/auth/auth.service.ts` | Login con deviceId, refresh tokens, multi-dispositivo (DESACTIVADO) |
+| `apps/backend/src/auth/strategies/jwt.strategy.ts` | JWT validation — sesión única (DESACTIVADA) |
+| `apps/backend/src/tickets/tickets.controller.ts` | Endpoints de tickets: listar, cambiar estado, evidencia (FileInterceptor) |
+| `apps/backend/src/tickets/tickets.service.ts` | Lógica de tickets: filtros por motorizado, guardar registro, transiciones de estado |
+| `apps/backend/src/motorizados/motorizados.service.ts` | UI_CONFIG (SDUI): colores, textos, ticketFlow, screenConfig |
+| `apps/backend/src/socket/socket.gateway.ts` | WebSocket gateway para eventos en tiempo real |
 
-## Flujo de Tickets (NO CAMBIAR)
-1. La app llama GET /api/tickets → recibe tickets PENDIENTE + asignados al motorizado
-2. Los tickets se separan en UI:
-   - **Pendientes** (azul) = tickets con estado `PENDIENTE` (sin asignar, para agarrar)
-   - **Asignados** (naranja) = tickets con estado `ASIGNADO` (ya tomados)
-   - **En camino** (azul) = tickets con estado `EN_RUTA/EN_RECOJO/RECOGIDO`
-   - **Completados** (verde) = tickets con estado `ENTREGADO/CERRADO`
-3. Botón en ticket PENDIENTE: "📋 Tomar pedido" → POST /api/tickets/:id/tomar
-4. Botón en ticket ASIGNADO: "🏍️ Voy ahora" → cambia a EN_RUTA
-5. Botón en ticket EN_RUTA/EN_RECOJO: "🧪 Ya recogí la muestra" → abre modal de registro
+## Bugs Conocidos y Fixes
 
-## Estados del Motorizado (DISEÑO FINAL)
-Solo 3 estados, el motorizado controla manualmente (NO el backend por GPS):
+### Bug 1: LOGOUT no funciona (RESUELTO en 9ab9cc7)
+- **Causa raíz:** `dia.tsx` importaba `forceStopAllTracking` de `useTracking.ts`, pero esa función NO EXISTE en ese módulo (solo exporta `useTracking`). Metro bundler no corre TypeScript, compila sin error. En runtime: `undefined()` → crash → nunca llega a `clearUser()`.
+- **Fix:** 
+  - Eliminar el import fantasma de `forceStopAllTracking`
+  - Reemplazar por llamadas API directas (`/tracking/stop`, `/motorizados/me/estado`)
+  - `clearUser()` + `router.replace('/login')` se ejecutan SIN await antes que cualquier async
+  - La limpieza (tracking, socket, logout API) corre en IIFE con try/catch
 
-| Código | App muestra | Backend guarda | Admin muestra |
-|--------|------------|---------------|---------------|
-| DISPONIBLE | 🟢 Disponible | DISPONIBLE | 🟢 Disponible |
-| EN_REFRIGERIO | 🍽️ Refrigerio | EN_REFRIGERIO | 🍽️ En refrigerio |
-| OFFLINE | 🏁 Fin de turno | OFFLINE | 🏁 Fuera de línea |
+### Bug 2: Fotos fallan con "No se pudo leer la foto" (PENDIENTE)
+- **Causa probable:** `ImagePicker.launchCameraAsync` devuelve URI tipo `content://media/...` en algunos Android. `expo-file-system.readAsStringAsync` no siempre soporta `content://` URIs.
+- **Fix recomendado por Claude Code:** NO usar `FileSystem.readAsStringAsync` + base64. Usar el endpoint `POST /tickets/:id/evidencia` que ya existe con `FormData` (multipart, nativo, sin heap JS). Cambiar el orden en `completarRecojo`:
+  1. `subirEvidencia(ticketId, fotoUri)` → obtiene URL
+  2. `guardarRegistro(ticketId, { refNombre, observaciones, fotoUrl: url })`
+  3. `updateEstado → RECOGIDO`
+- **Nota:** `removeClippedSubviews=false` NO es la causa real (Claude Code lo confirmó).
 
-**REGLAS:**
-- El estado es INDEPENDIENTE de los tickets activos
-- Tracking GPS NO cambia estado
-- Solo el motorizado decide su estado desde la app
-- Login sin tickets → DISPONIBLE (o el estado que tenía antes)
+## SDUI (Server-Driven UI)
+La app ya carga colores, textos, botones y visibilidad de secciones desde `/motorizados/config`. El archivo UI_CONFIG está en `motorizados.service.ts` líneas 23-302. Cambios allí se reflejan SIN rebuild.
 
-## Info build
-- **Proyecto Expo:** `/home/sglab-moto/`
-- **Comando build (local):** `npx eas build --platform android --profile preview --local`
-- **GitHub Actions:** el workflow `build-apk.yml` corre en push a master o workflow_dispatch
-- Archivos protegidos (NO TOCAR): client.ts, auth.ts, socket.ts, authStore.ts, useTracking.ts, _layout.tsx, index.tsx, login.tsx, (app)/_layout.tsx
+## Sesión única DESACTIVADA
+Se eliminó la verificación de deviceId en JWT, login y refresh. Los motorizados pueden iniciar sesión en múltiples dispositivos sin que se revoquen entre sí.
 
-## 🐛 BUG REPORTADO: Crash al loguear usuario nuevo
-**Síntoma:** La APK se cierra inmediatamente al hacer login con un motorizado creado desde el panel web. Los motorizados existentes (Juan Carlos, Juan Oblitas, José Machuca) funcionan normal.
-
-**Usuario de prueba:** pruebas01@sglab.com / 12345678
-
-**Lo que se sabe:**
-- El backend devuelve login exitoso (accessToken, refreshToken, user con nombre+rol+tenantId+permissions)
-- El crash ocurre DESPUÉS del login exitoso, al cargar la pantalla de tickets
-- Posibles causas:
-  - `login.tsx:58`: `setUser(res.user, res.token)` — el store espera 1 param, el 2do se ignora en JS (no crash directo)
-  - Fallo en `cargarTickets()` para usuario sin tickets
-  - Fallo en `getSocket()` para usuario nuevo
-  - `config?.ticketFlow` es null/undefined para un tenant sin config motorizados
-- **No hay stack trace** — la APK no tiene Sentry/Crashlytics
-
-**Solución deseada:**
-1. NO tocar archivos marcados como NO MODIFICAR
-2. Identificar causa exacta del crash
-3. Integrar Sentry o similar para capturar crashes futuros
-4. Hacer un build de APK de prueba
+## Estado Actual
+- Último commit: 9ab9cc7 (fix logout)
+- Build actual en GitHub Actions (cf1a3af) — tiene el fix de logout prioritario pero NO el fix de fotos
+- Pendiente: arreglar fotos usando `subirEvidencia` con FormData
