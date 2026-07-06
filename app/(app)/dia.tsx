@@ -1,3 +1,4 @@
+import { router } from 'expo-router';
 import { useState, useEffect, useCallback } from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, Alert, ScrollView } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -70,15 +71,27 @@ export default function DiaScreen() {
   const fs = designTokens?.fontSizes || {};
 
   const logout = () => {
+    console.log('[DIA LOGOUT] Botón presionado');
     Alert.alert('Cerrar sesión', '¿Seguro que quieres cerrar sesión?', [
       { text: 'Cancelar', style: 'cancel' },
       { text: 'Salir', style: 'destructive', onPress: async () => {
-        await forceStopAllTracking();
-        deactivateKeepAwake();
-        disconnectSocket();
-        try { await api.patch('/motorizados/me/estado', { estado: 'OFFLINE' }); } catch (e) { log('WARN', 'dia', 'Error estado OFFLOAD: ' + String(e)); }
-        try { await authApi.logout(); } catch (e) { log('WARN', 'logout', String(e)); }
-        clearUser();
+        console.log('[DIA LOGOUT] Confirmó salida');
+        try {
+          console.log('[DIA LOGOUT] Forzando stop tracking');
+          await forceStopAllTracking();
+          deactivateKeepAwake();
+          disconnectSocket();
+          try { await api.patch('/motorizados/me/estado', { estado: 'OFFLINE' }); } catch (e) { log('WARN', 'dia', 'Error estado OFFLOAD: ' + String(e)); }
+          console.log('[DIA LOGOUT] Llamando authApi.logout()');
+          try { await authApi.logout(); } catch (e) { console.error('[DIA LOGOUT] Error API:', e); log('WARN', 'logout', String(e)); }
+          console.log('[DIA LOGOUT] clearUser()');
+          clearUser();
+          setTimeout(() => router.replace('/login'), 100);
+        } catch (e) {
+          console.error('[DIA LOGOUT] Error INESPERADO:', e);
+          clearUser();
+          router.replace('/login');
+        }
       }},
     ]);
   };

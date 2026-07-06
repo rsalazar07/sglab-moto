@@ -272,13 +272,26 @@ export default function TicketsScreen() {
   };
 
   const logout = () => {
+    console.log('[LOGOUT] Botón presionado');
     Alert.alert('Cerrar sesión', '¿Seguro que quieres salir?', [
       { text: 'Cancelar', style: 'cancel' },
       { text: 'Salir', style: 'destructive', onPress: async () => {
-        if (turnoActivo) await finalizarTurno();
-        disconnectSocket();
-        try { await authApi.logout(); } catch (e) { log('ERROR', 'logout', String(e)); }
-        clearUser();
+        console.log('[LOGOUT] Confirmó salida');
+        try {
+          if (turnoActivo) { console.log('[LOGOUT] Finalizando turno'); await finalizarTurno(); }
+          console.log('[LOGOUT] Desconectando socket');
+          disconnectSocket();
+          console.log('[LOGOUT] Llamando authApi.logout()');
+          try { await authApi.logout(); } catch (e) { console.error('[LOGOUT] Error en logout API:', e); log('ERROR', 'logout', String(e)); }
+          console.log('[LOGOUT] Ejecutando clearUser()');
+          clearUser();
+          console.log('[LOGOUT] Redirigiendo a login');
+          setTimeout(() => router.replace('/login'), 100);
+        } catch (e) {
+          console.error('[LOGOUT] Error INESPERADO en logout:', e);
+          clearUser();
+          router.replace('/login');
+        }
       }},
     ]);
   };
