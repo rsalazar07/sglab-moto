@@ -59,30 +59,65 @@ const TicketCard = memo(({ item, config, loadingId, onAvanzar }: {
   const tf2 = config?.ticketFlow || {};
   const uiStatus = tf2[item.estado] || 'done';
   const isDone = uiStatus === 'done';
-  const borderColor = uiStatus === 'pendiente' ? C.blue : uiStatus === 'pending' ? C.orange : uiStatus === 'active' ? C.blue : C.green;
+  const esUrgente = item.tipo === 'URGENTE';
 
+  // Card strip color
+  const stripColor = isDone
+    ? '#22c55e'
+    : uiStatus === 'active'
+      ? '#f59e0b'
+      : uiStatus === 'pending'
+        ? '#f59e0b'
+        : esUrgente
+          ? '#ef4444'
+          : '#3b82f6';
+
+  // Codigo display: usar codigo del backend o generar fallback
+  const codigoDisplay = item.codigo || `TKT-${item.id.slice(-4).toUpperCase()}`;
+  const horaCreacion = new Date(item.createdAt).toLocaleTimeString('es-PE', { hour: '2-digit', minute: '2-digit' });
+
+  // Estado badge
   const estadoLabels: Record<string, string> = {
-    PENDIENTE: UL.badgePendiente || '📋 PENDIENTE',
-    ASIGNADO: UL.badgeAsignado || '🔄 ASIGNADO',
-    EN_RUTA: UL.badgeEnRuta || '🏍️ EN RUTA',
-    EN_RECOJO: UL.badgeEnRecojo || UL.badgeEnRuta || '🏍️ EN RUTA',
-    RECOGIDO: UL.badgeRecogido || '🔵 RECOGIDO',
-    EN_LABORATORIO: UL.badgeEnLaboratorio || '🧪 EN LAB',
-    ENTREGADO: UL.badgeEntregado || '✅ ENTREGADO',
-    CERRADO: UL.badgeCerrado || '🔒 CERRADO',
-    CANCELADO: UL.badgeCancelado || '❌ CANCELADO',
-    FALLIDO: UL.badgeFallido || '⚠️ FALLIDO',
+    PENDIENTE: UL.badgePendiente || 'PENDIENTE',
+    ASIGNADO: UL.badgeAsignado || 'ASIGNADO',
+    EN_RUTA: UL.badgeEnRuta || 'EN RUTA',
+    EN_RECOJO: UL.badgeEnRecojo || 'EN RECOJO',
+    RECOGIDO: UL.badgeRecogido || 'RECOGIDO',
+    EN_LABORATORIO: UL.badgeEnLaboratorio || 'EN LAB',
+    ENTREGADO: UL.badgeEntregado || 'ENTREGADO',
+    CERRADO: UL.badgeCerrado || '✓ CERRADO',
+    CANCELADO: UL.badgeCancelado || 'CANCELADO',
+    FALLIDO: UL.badgeFallido || 'FALLIDO',
   };
   const badgeLabel = estadoLabels[item.estado] || item.estado;
+
+  // Estado badge style
+  const estadoBgColor = isDone ? '#f0fdf4'
+    : uiStatus === 'pendiente' ? '#f8fafc'
+    : uiStatus === 'pending' ? (C.orangeLight || '#fffbeb')
+    : uiStatus === 'active' ? (C.blueLight || '#eff6ff')
+    : '#f8fafc';
+  const estadoTextColor = isDone ? '#15803d'
+    : uiStatus === 'pendiente' ? '#64748b'
+    : uiStatus === 'pending' ? (C.orange || '#d97706')
+    : uiStatus === 'active' ? (C.blue || '#2563eb')
+    : '#64748b';
+  const estadoBorderColor = isDone ? '#86efac'
+    : uiStatus === 'pendiente' ? '#cbd5e1'
+    : uiStatus === 'pending' ? (C.orange || '#fde68a')
+    : uiStatus === 'active' ? (C.blueBorder || '#bfdbfe')
+    : '#cbd5e1';
+
+  // Accion button
   const btnLabels: Record<string, string> = {
-    pendiente: UL.btnTomarPedido || '📋 Tomar pedido',
-    pending: UL.btnVoyAhora || '🏍️ Voy ahora',
+    pendiente: UL.btnTomarPedido || 'Tomar pedido →',
+    pending: UL.btnVoyAhora || '🏍 Voy ahora',
     active: UL.btnYaRecogi || '🧪 Ya recogí',
   };
   const btnColors: Record<string, string> = {
-    pendiente: C.blue,
-    pending: C.orange,
-    active: C.blue,
+    pendiente: C.green || '#22c55e',
+    pending: C.orange || '#f59e0b',
+    active: '#6366f1',
   };
   const fb = config?.flowButtons?.[item.estado];
   const btnLabel = fb?.label || btnLabels[uiStatus];
@@ -91,80 +126,116 @@ const TicketCard = memo(({ item, config, loadingId, onAvanzar }: {
 
   const fs = DT?.fontSizes || {};
   const sp = DT?.spacing || {};
-  const esUrgente = item.tipo === 'URGENTE';
+  const showMapBtn = (screen.showMapButton !== false) && !!item.referencia?.latitud && !!item.referencia?.longitud;
+  const isOverdue = item.horaLimite ? new Date(item.horaLimite) < new Date() : false;
 
   return (
-    <View style={[s.tcard, { borderLeftColor: esUrgente ? '#E74C3C' : borderColor, borderLeftWidth: esUrgente ? 6 : 4, padding: sp.cardPadding || 13, borderRadius: (DT?.borderRadius?.card ?? 12) }, (uiStatus === 'active' || uiStatus === 'pendiente') && s.tcardActive]}>
-      <View style={s.tcTop}>
-        {(screen.showCreatedAt !== false) && (
-          <Text style={[s.tcId, { fontSize: fs.micro || 9 }]}>🕐 {new Date(item.createdAt).toLocaleTimeString('es-PE', { hour:'2-digit', minute:'2-digit' })}</Text>
-        )}
-        <View style={[s.badge, {
-          backgroundColor: uiStatus === 'pendiente' ? C.blueLight : uiStatus === 'pending' ? C.orangeLight : uiStatus === 'active' ? C.blueLight : C.grayLight,
-          borderColor: uiStatus === 'pendiente' ? C.blueBorder : uiStatus === 'pending' ? C.orange : uiStatus === 'active' ? C.blueBorder : C.gray,
-          borderRadius: DT?.borderRadius?.badge ?? 6,
-        }]}>
-          <Text style={[s.badgeTxt, { fontSize: fs.badge || 11, color: uiStatus === 'pendiente' ? C.blue : uiStatus === 'pending' ? C.orange : uiStatus === 'active' ? C.blue : C.gray }]}>
-            {badgeLabel}
-          </Text>
+    <View style={[s.tcard, { borderRadius: DT?.borderRadius?.card ?? 14 }]}>
+      {/* Franja horizontal superior */}
+      <View style={[s.cardStrip, { backgroundColor: stripColor }]} />
+
+      <View style={[s.cardBody, { padding: sp.cardPadding || 12 }]}>
+        {/* Fila superior: codigo+hora IZQUIERDA, badges DERECHA */}
+        <View style={s.tcTop}>
+          <View style={s.cardMeta}>
+            <Text style={s.ticketCode}>
+              {codigoDisplay}
+              <Text style={s.ticketTime}> · {horaCreacion}</Text>
+            </Text>
+          </View>
+          <View style={s.ticketBadgesRow}>
+            {!isDone && (
+              <View style={[s.tipoBadge, esUrgente
+                ? { backgroundColor: C.redLight || '#fef2f2', borderColor: '#fca5a5' }
+                : { backgroundColor: C.blueLight || '#eff6ff', borderColor: C.blueBorder || '#bfdbfe' }]}>
+                <Text style={[s.tipoBadgeTxt, { color: esUrgente ? (C.red || '#dc2626') : (C.blue || '#2563eb') }]}>
+                  {esUrgente ? `🔴 ${UL.badgeUrgente || 'URGENTE'}` : 'NORMAL'}
+                </Text>
+              </View>
+            )}
+            <View style={[s.estadoBadge, { backgroundColor: estadoBgColor, borderColor: estadoBorderColor }]}>
+              <Text style={[s.estadoBadgeTxt, { color: estadoTextColor }]}>{badgeLabel}</Text>
+            </View>
+          </View>
         </View>
-        {esUrgente && (
-          <View style={{ backgroundColor: '#FDEDEC', borderRadius: 4, paddingHorizontal: 6, paddingVertical: 2, marginLeft: 4 }}>
-            <Text style={{ color: '#E74C3C', fontSize: fs.micro || 9, fontWeight: '800' }}>🚨 {UL.badgeUrgente || 'URGENTE'}</Text>
+
+        {/* Bloque referencia */}
+        {item.referencia?.nombreComercial && (
+          <View style={s.refBlock}>
+            <Text style={s.refBlockIcon}>🏥</Text>
+            <View style={{ flex: 1 }}>
+              <Text style={[s.refName, { fontSize: fs.caption || 13 }]} numberOfLines={1}>
+                {item.referencia.nombreComercial}
+              </Text>
+              {item.referencia.direccion ? (
+                <Text style={[s.refAddress, { fontSize: fs.small || 11 }]} numberOfLines={2}>
+                  {item.referencia.direccion}
+                </Text>
+              ) : null}
+            </View>
           </View>
         )}
-      </View>
 
-      {item.referencia?.nombreComercial && (
-        <Text style={[s.tcRef, { fontSize: fs.caption || 12 }]}>📍 {item.referencia.nombreComercial}</Text>
-      )}
-
-      <Text style={[s.tcType, { fontSize: fs.body || 14 }]}>{item.tipoMuestra || item.tipo || item.referencia?.nombreComercial || 'Muestra'}</Text>
-      <Text style={[s.tcAddr, { fontSize: fs.small || 10 }]}>{item.referencia?.direccion ?? ''}</Text>
-      {item.referencia?.telefono && (
-        <Text style={[s.tcPhone, { fontSize: fs.micro || 9 }]}>📞 {item.referencia.telefono}</Text>
-      )}
-
-      {(screen.showTimeLimit !== false) && item.horaLimite && !isDone && (
-        <View style={[s.ttime, new Date(item.horaLimite) < new Date() && s.ttimeUrgent]}>
-          <Text style={[s.ttimeTxt, new Date(item.horaLimite) < new Date() && { color: C.red }, { fontSize: fs.micro || 9 }]}>
-            ⏰ Límite: {new Date(item.horaLimite).toLocaleTimeString('es-PE', { hour:'2-digit', minute:'2-digit' })}
+        {/* Fila muestra + hora límite */}
+        <View style={s.muestraRow}>
+          <Text style={s.muestraIc}>🧪</Text>
+          <Text style={[s.muestraTxt, { fontSize: fs.small || 11 }]}>
+            {item.tipoMuestra || item.tipo || 'Muestra'}
           </Text>
-        </View>
-      )}
-
-      {(screen.showNotas !== false) && item.notas && !isDone && (
-        <Text style={[s.notas, { fontSize: fs.small || 10 }]}>📝 {item.notas}</Text>
-      )}
-
-      {!isDone && (!!btnLabel || ((screen.showMapButton !== false) && !!item.referencia?.latitud && !!item.referencia?.longitud)) && (
-        <View style={{ flexDirection: 'row', gap: 6, marginTop: 8, alignItems: 'stretch' }}>
-          {!!btnLabel && (
-            <TouchableOpacity
-              style={[s.abtn, { flex: 1, backgroundColor: btnColor, padding: sp.buttonPadding || 10, minHeight: DT?.layout?.buttonMinHeight ?? 48, borderRadius: DT?.borderRadius?.button ?? 8, marginTop: 0 }, cargando && { opacity: 0.6 }]}
-              onPress={() => onAvanzar(item)}
-              disabled={cargando}
-              activeOpacity={0.82}
-            >
-              <Text style={[s.abtnTxt, { fontSize: fs.body || 14 }]} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.7}>{cargando ? (UL.btnCargando || 'Actualizando...') : btnLabel}</Text>
-            </TouchableOpacity>
-          )}
-          {(screen.showMapButton !== false) && !!item.referencia?.latitud && !!item.referencia?.longitud && (
-            <TouchableOpacity
-              style={[s.mapBtn, { borderColor: C.blue, minHeight: DT?.layout?.buttonMinHeight ?? 48, borderRadius: DT?.borderRadius?.button ?? 8 }]}
-              onPress={() => Linking.openURL(`https://www.google.com/maps/dir/?api=1&destination=${item.referencia!.latitud},${item.referencia!.longitud}`)}
-              activeOpacity={0.82}
-            >
-              <Text style={s.mapBtnIc}>📍</Text>
-              <Text style={[s.mapBtnTxt, { color: C.blue }]}>Llegar</Text>
-            </TouchableOpacity>
+          {(screen.showTimeLimit !== false) && item.horaLimite && !isDone && (
+            <>
+              <Text style={s.muestraSep}>·</Text>
+              <View style={[s.horaLimitPill, isOverdue && s.horaLimitUrgent]}>
+                <Text style={[s.horaLimitTxt, isOverdue && { color: C.red || '#dc2626' }, { fontSize: fs.micro || 10 }]}>
+                  ⏰ {new Date(item.horaLimite).toLocaleTimeString('es-PE', { hour: '2-digit', minute: '2-digit' })}
+                </Text>
+              </View>
+            </>
           )}
         </View>
-      )}
 
-      {isDone && (
-        <Text style={[s.doneTag, { fontSize: fs.small || 10 }]}>✅ {badgeLabel}</Text>
-      )}
+        {(screen.showNotas !== false) && item.notas && !isDone && (
+          <Text style={[s.notas, { fontSize: fs.small || 10 }]}>📝 {item.notas}</Text>
+        )}
+
+        {/* Acciones: MAPA a la IZQUIERDA (verde), principal a la DERECHA */}
+        {!isDone && (!!btnLabel || showMapBtn) && (
+          <View style={s.cardActions}>
+            {showMapBtn && (
+              <TouchableOpacity
+                style={[s.mapBtn, { minHeight: DT?.layout?.buttonMinHeight ?? 40, borderRadius: DT?.borderRadius?.button ?? 9 }]}
+                onPress={() => Linking.openURL(`https://www.google.com/maps/dir/?api=1&destination=${item.referencia!.latitud},${item.referencia!.longitud}`)}
+                activeOpacity={0.82}
+              >
+                <Text style={s.mapBtnIc}>📍</Text>
+                <Text style={s.mapBtnTxt}>Llegar</Text>
+              </TouchableOpacity>
+            )}
+            {!!btnLabel && (
+              <TouchableOpacity
+                style={[s.abtn, {
+                  flex: 1,
+                  backgroundColor: btnColor,
+                  padding: sp.buttonPadding || 10,
+                  minHeight: DT?.layout?.buttonMinHeight ?? 40,
+                  borderRadius: DT?.borderRadius?.button ?? 9,
+                }, cargando && { opacity: 0.6 }]}
+                onPress={() => onAvanzar(item)}
+                disabled={cargando}
+                activeOpacity={0.82}
+              >
+                <Text style={[s.abtnTxt, { fontSize: fs.body || 13 }]} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.7}>
+                  {cargando ? (UL.btnCargando || 'Actualizando...') : btnLabel}
+                </Text>
+              </TouchableOpacity>
+            )}
+          </View>
+        )}
+
+        {isDone && (
+          <Text style={[s.doneTag, { fontSize: fs.small || 10 }]}>✅ {badgeLabel}</Text>
+        )}
+      </View>
     </View>
   );
 });
@@ -201,9 +272,9 @@ export default function TicketsScreen() {
 
   // ─── Leer configuración SDUI desde VPS ───
   const C = config?.dashboard?.colors || C_FALLBACK;
-  const DT = config?.designTokens || {}; // designTokens
-  const UL = config?.uiLabels || {};     // uiLabels
-  const SC = config?.screenConfig || {}; // screenConfig
+  const DT = config?.designTokens || {};
+  const UL = config?.uiLabels || {};
+  const SC = config?.screenConfig || {};
   const screen = SC?.tickets || {};
   const sections = SC?.sections || {};
 
@@ -295,10 +366,8 @@ export default function TicketsScreen() {
       { text: 'Cancelar', style: 'cancel' },
       { text: 'Salir', style: 'destructive', onPress: () => {
         console.log('[LOGOUT] Confirmó salida');
-        // PRIMERO: limpiar estado y redirigir (inmediato, sin await)
         clearUser();
         router.replace('/login');
-        // DESPUÉS: tareas de limpieza en segundo plano (no bloquean)
         (async () => {
           try {
             if (turnoActivo) { console.log('[LOGOUT] Finalizando turno'); await finalizarTurno(); }
@@ -315,7 +384,7 @@ export default function TicketsScreen() {
   // Avanzar estado de ticket
   const avanzarEstado = async (ticket: Ticket) => {
     const flow = CLIENT_FLOW_MAP[ticket.estado];
-    if (!flow) return; // RECOGIDO, ENTREGADO, CERRADO, etc. — sin botón
+    if (!flow) return;
 
     if (flow.accion === 'tomarTicket') {
       setLoadingId(ticket.id);
@@ -326,7 +395,7 @@ export default function TicketsScreen() {
         setTickets(prev => prev.map(t => t.id === ticket.id ? (res ?? { ...t, estado: 'ASIGNADO' as EstadoTicket }) : t));
         if (!turnoActivo) await iniciarTurno();
       } catch (e: any) {
-        setTickets(prevTickets); // revertir
+        setTickets(prevTickets);
         const msg = e.response?.data?.message;
         log('ERROR', 'avanzarEstado', `tomarTicket: ${e?.response?.data ? JSON.stringify(e.response.data) : e?.message || 'unknown'}`);
         Alert.alert('Error', Array.isArray(msg) ? msg[0] : msg ?? 'No se pudo tomar el pedido');
@@ -360,7 +429,7 @@ export default function TicketsScreen() {
       setTickets(prev => prev.map(t => t.id === ticket.id ? (res.data ?? { ...t, estado: nextEstado }) : t));
       if (!turnoActivo) await iniciarTurno();
     } catch (e: any) {
-      setTickets(prevTickets); // revertir
+      setTickets(prevTickets);
       const msg = e.response?.data?.message;
       log('ERROR', 'avanzarEstado', `${flow.accion}: ${e?.response?.data ? JSON.stringify(e.response.data) : e?.message || 'unknown'}`);
       Alert.alert('Error', Array.isArray(msg) ? msg[0] : msg ?? 'Error al actualizar');
@@ -400,9 +469,6 @@ export default function TicketsScreen() {
     const id = currentTicketId.current;
     if (!id) return;
     setSubiendo(true);
-
-    // fotoBase64 ya viene del state (cargado por ImagePicker con base64:true)
-    // No necesita FileSystem.readAsStringAsync — el picker resuelve content:// URIs internamente
 
     if (metodoPago && metodoPago !== 'SIN_PAGO' && monto) {
       try {
@@ -467,7 +533,6 @@ export default function TicketsScreen() {
     });
     if (!result.canceled) {
       setFotoUri(result.assets[0].uri);
-      // Guardar base64 directamente (ImagePicker resuelve content:// URIs internamente)
       if (result.assets[0].base64) {
         setFotoBase64(result.assets[0].base64);
       }
@@ -500,71 +565,67 @@ export default function TicketsScreen() {
 
   const eActual = config?.estadosMoto?.[estadoMoto] || {};
 
-  const tabLabelPendientes = UL.tabPendientes || 'Pendientes';
+  const tabLabelPendientes = UL.tabPendientes || 'Disponibles';
   const tabLabelMiRuta = UL.tabMiRuta || 'Mi Ruta';
-  const seccionEnCurso = UL.seccionEnCurso || '🔵 En curso';
-  const seccionCompletados = UL.seccionCompletados || '✅ Completados';
+  const seccionEnCurso = UL.seccionEnCurso || 'En curso';
+  const seccionCompletados = UL.seccionCompletados || 'Completados hoy';
 
   const listaCompleta: any[] = activeTab === 'pendientes'
     ? tabData.pendientesArr
     : [
-      ...(tabData.enCurso.length > 0 ? [{ _sep: seccionEnCurso, _color: C.blue }] : []),
+      ...(tabData.enCurso.length > 0 ? [{ _sep: seccionEnCurso, _count: tabData.enCurso.length, _color: C.blue }] : []),
       ...tabData.enCurso,
-      { _sep: `${seccionCompletados} (${tabData.completadosArr.length}) ${completadosExpanded ? '▲' : '▼'}`, _color: C.green, _collapsible: true },
+      { _sep: seccionCompletados, _count: tabData.completadosArr.length, _color: C.green, _collapsible: true },
       ...(completadosExpanded ? tabData.completadosArr : []),
     ];
 
   return (
     <SafeAreaView style={s.root} edges={['top']}>
 
-      {/* ─── HEADER (controlable desde VPS) ─── */}
+      {/* ─── HEADER gradiente azul oscuro ─── */}
       {(screen.showHeader !== false) && (
       <View style={s.header}>
         <View style={s.hTop}>
           {(screen.showAvatar !== false) && (
           <View style={s.av}>
-            <Text style={s.avTxt}>{user?.nombre?.[0]?.toUpperCase() ?? 'M'}</Text>
+            <Text style={s.avTxt}>{user?.nombre?.[0]?.toUpperCase() ?? '🏍'}</Text>
           </View>
           )}
           <View style={{ flex: 1 }}>
             <Text style={s.hName}>{user?.nombre ?? 'Motorizado'}</Text>
-            {(screen.showGpsStatus !== false) && (
-            <View style={s.gpsRow}>
-              <View style={[s.gpsDot, { backgroundColor: eActual.gpsColor }]} />
-              <Text style={[s.gpsTxt, { color: eActual.gpsColor }]}>{eActual.gpsTxt || 'GPS activo'}</Text>
-            </View>
-            )}
           </View>
+          {(screen.showGpsStatus !== false) && (
+          <View style={s.gpsBadge}>
+            <View style={[s.gpsDot, { backgroundColor: eActual.gpsColor || '#22c55e' }]} />
+            <Text style={s.gpsTxt}>{eActual.gpsTxt || 'GPS activo'}</Text>
+          </View>
+          )}
           {(screen.showEstadoPill !== false) && (
           <TouchableOpacity
-            style={[s.estadoPill, { backgroundColor: eActual.bg, borderColor: eActual.border }]}
+            style={[s.estadoPill, { backgroundColor: eActual.bg || 'rgba(255,255,255,0.12)', borderColor: eActual.border || 'rgba(255,255,255,0.2)' }]}
             onPress={() => { setEstadoSel(estadoMoto); setEstadoModal(true); }}
             activeOpacity={0.82}
           >
-            <Text style={s.estadoPillIc}>{eActual.ic}</Text>
-            <Text style={[s.estadoPillTxt, { color: eActual.color }]}>{eActual.label}</Text>
+            <Text style={s.estadoPillIc}>{eActual.ic || '🟢'}</Text>
+            <Text style={[s.estadoPillTxt, { color: eActual.color || '#fff' }]}>{eActual.label || 'Estado'}</Text>
           </TouchableOpacity>
           )}
         </View>
 
-        {/* Stats header (controlable desde VPS) */}
+        {/* Stats header — 3 chips: pendientes, en ruta, recogidos */}
         {(screen.showStats !== false) && (
         <View style={s.qsRow}>
           <View style={s.qs}>
-            <Text style={[s.qsVal, { color: C.blue }]}>{tabData.pendientesArr.length}</Text>
+            <Text style={s.qsVal}>{tabData.pendientesArr.length}</Text>
             <Text style={s.qsLbl}>{UL.statsPendientes || 'Pendientes'}</Text>
           </View>
-          <View style={s.qs}>
-            <Text style={[s.qsVal, { color: C.orange }]}>{tabData.asignadosArr.length}</Text>
-            <Text style={s.qsLbl}>{UL.statsAsignados || 'Asignados'}</Text>
-          </View>
-          <View style={s.qs}>
-            <Text style={[s.qsVal, { color: C.blue }]}>{tabData.activosArr.length}</Text>
-            <Text style={s.qsLbl}>{UL.statsEnCamino || 'En ruta'}</Text>
-          </View>
-          <View style={s.qs}>
-            <Text style={[s.qsVal, { color: C.green }]}>{tabData.completadosArr.length}</Text>
+          <View style={[s.qs, s.qsGreen]}>
+            <Text style={[s.qsVal, { color: '#4ade80' }]}>{tabData.completadosArr.length}</Text>
             <Text style={s.qsLbl}>{UL.statsCompletados || 'Recogidos'}</Text>
+          </View>
+          <View style={[s.qs, s.qsAmber]}>
+            <Text style={[s.qsVal, { color: '#fbbf24' }]}>{tabData.enCurso.length}</Text>
+            <Text style={s.qsLbl}>{UL.statsEnCamino || 'En ruta'}</Text>
           </View>
         </View>
         )}
@@ -572,33 +633,33 @@ export default function TicketsScreen() {
       )}
 
       {/* Banner de estado */}
-      <View style={[s.banner, { backgroundColor: eActual.bg }]}>
-        <Text style={s.bannerIc}>{eActual.bannerIc}</Text>
-        <Text style={[s.bannerTxt, { color: eActual.color }]}>{eActual.bannerTxt}</Text>
+      <View style={[s.banner, { backgroundColor: eActual.bg || '#f8fafc' }]}>
+        <Text style={s.bannerIc}>{eActual.bannerIc || ''}</Text>
+        <Text style={[s.bannerTxt, { color: eActual.color || '#64748b' }]}>{eActual.bannerTxt || ''}</Text>
       </View>
 
-      {/* ─── TAB BAR (controlable desde VPS) ─── */}
+      {/* ─── TAB BAR fondo azul oscuro ─── */}
       <View style={s.tabBar}>
         <TouchableOpacity
-          style={[s.tab, activeTab === 'pendientes' && { borderBottomColor: C.blue }]}
+          style={[s.tab, activeTab === 'pendientes' && s.tabActive]}
           onPress={() => setActiveTab('pendientes')}
           activeOpacity={0.82}
         >
-          <Text style={[s.tabTxt, activeTab === 'pendientes' && { color: C.blue }]}>{tabLabelPendientes}</Text>
+          <Text style={[s.tabTxt, activeTab === 'pendientes' && s.tabTxtActive]}>{tabLabelPendientes}</Text>
           {tabData.pendientesArr.length > 0 && (
-            <View style={[s.tabBadge, { backgroundColor: C.blue }]}>
+            <View style={s.tabBadge}>
               <Text style={s.tabBadgeTxt}>{tabData.pendientesArr.length}</Text>
             </View>
           )}
         </TouchableOpacity>
         <TouchableOpacity
-          style={[s.tab, activeTab === 'mi-ruta' && { borderBottomColor: C.orange }]}
+          style={[s.tab, activeTab === 'mi-ruta' && s.tabActive]}
           onPress={() => setActiveTab('mi-ruta')}
           activeOpacity={0.82}
         >
-          <Text style={[s.tabTxt, activeTab === 'mi-ruta' && { color: C.orange }]}>{tabLabelMiRuta}</Text>
+          <Text style={[s.tabTxt, activeTab === 'mi-ruta' && s.tabTxtActive]}>{tabLabelMiRuta}</Text>
           {(tabData.enCurso.length + tabData.completadosArr.length) > 0 && (
-            <View style={[s.tabBadge, { backgroundColor: C.orange }]}>
+            <View style={s.tabBadge}>
               <Text style={s.tabBadgeTxt}>{tabData.enCurso.length + tabData.completadosArr.length}</Text>
             </View>
           )}
@@ -608,14 +669,41 @@ export default function TicketsScreen() {
       {/* Lista tickets */}
       <FlatList
         data={listaCompleta}
-        keyExtractor={(item, i) => item._sep ? 'sep-' + i : item.id}
-        renderItem={({ item }) =>
-          item._sep
-            ? <Text style={[s.sep, { color: item._color, fontSize: DT?.fontSizes?.micro || 9 }]}>{item._sep}</Text>
-            : <TicketCard item={item} config={config} loadingId={loadingId} onAvanzar={avanzarEstado} />
-        }
+        keyExtractor={(item, i) => item._sep !== undefined ? 'sep-' + i : item.id}
+        renderItem={({ item }: { item: any }) => {
+          if (item._sep !== undefined) {
+            if (item._collapsible) {
+              return (
+                <TouchableOpacity
+                  style={s.sepRow}
+                  onPress={() => setCompletadosExpanded(e => !e)}
+                  activeOpacity={0.7}
+                >
+                  <Text style={[s.sepTitle, { fontSize: DT?.fontSizes?.micro || 10 }]}>{item._sep}</Text>
+                  <View style={s.sepToggle}>
+                    <Text style={s.sepToggleTxt}>
+                      {completadosExpanded ? (UL.ocultarLabel || 'Ocultar') : `Ver (${item._count ?? 0})`}
+                    </Text>
+                    <Text style={s.sepArrow}>{completadosExpanded ? '▲' : '▼'}</Text>
+                  </View>
+                </TouchableOpacity>
+              );
+            }
+            return (
+              <View style={s.sepRow}>
+                <Text style={[s.sepTitle, { color: item._color, fontSize: DT?.fontSizes?.micro || 10 }]}>{item._sep}</Text>
+                {item._count !== undefined && (
+                  <View style={s.sepCount}>
+                    <Text style={s.sepCountTxt}>{item._count}</Text>
+                  </View>
+                )}
+              </View>
+            );
+          }
+          return <TicketCard item={item} config={config} loadingId={loadingId} onAvanzar={avanzarEstado} />;
+        }}
         contentContainerStyle={s.list}
-        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={C.blue} />}
+        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor="#fff" />}
         ListEmptyComponent={
           <View style={s.empty}>
             <Text style={s.emptyIc}>📭</Text>
@@ -800,95 +888,148 @@ export default function TicketsScreen() {
   );
 }
 
-// ─── Styles estáticos (estructura) ───
-// Los valores dinámicos (fontSize, padding, borderRadius) se pasan inline desde SDUI
+// ─── Styles ───
 const s = StyleSheet.create({
-  root: { flex:1, backgroundColor:'#F2F3F4' },
-  header: { backgroundColor:'#FFFFFF', padding:14, borderBottomWidth:1, borderBottomColor:'#D5D8DC' },
-  hTop: { flexDirection:'row', alignItems:'center', gap:10, marginBottom:12 },
-  av: { width:40, height:40, borderRadius:11, backgroundColor:'#3498DB', alignItems:'center', justifyContent:'center' },
-  avTxt: { fontSize:17, fontWeight:'800', color:'#fff' },
-  hName: { fontSize:14, fontWeight:'700', color:'#1a1a2e' },
-  gpsRow: { flexDirection:'row', alignItems:'center', gap:4, marginTop:2 },
-  gpsDot: { width:6, height:6, borderRadius:3 },
-  gpsTxt: { fontSize:10, fontWeight:'600' },
-  estadoPill: { flexDirection:'row', alignItems:'center', gap:4, paddingHorizontal:10, paddingVertical:6, borderRadius:20, borderWidth:1.5 },
-  estadoPillIc: { fontSize:13 },
-  estadoPillTxt: { fontSize:10, fontWeight:'800' },
-  qsRow: { flexDirection:'row', gap:8 },
-  qs: { flex:1, backgroundColor:'#F2F3F4', borderRadius:9, padding:8, alignItems:'center' },
-  qsVal: { fontSize:18, fontWeight:'800' },
-  qsLbl: { fontSize:8, fontWeight:'600', color:'#7F8C8D', textTransform:'uppercase', letterSpacing:0.5, marginTop:1 },
-  banner: { flexDirection:'row', alignItems:'center', gap:6, paddingHorizontal:14, paddingVertical:8, borderBottomWidth:1, borderBottomColor:'#D5D8DC' },
-  bannerIc: { fontSize:13 },
-  bannerTxt: { fontSize:10, fontWeight:'700' },
-  list: { padding:12, paddingBottom:32 },
-  sep: { fontSize:9, fontWeight:'800', letterSpacing:1, textTransform:'uppercase', paddingVertical:6, paddingHorizontal:2 },
-  tcard: { backgroundColor:'#fff', borderLeftWidth:4 },
-  tcardActive: { backgroundColor:'#f0fafd' },
-  tcTop: { flexDirection:'row', justifyContent:'space-between', alignItems:'center', marginBottom:8 },
-  tcId: { color:'#7F8C8D', letterSpacing:0.5, fontFamily:'monospace' },
-  badge: { paddingHorizontal:8, paddingVertical:3, borderWidth:1 },
-  badgeTxt: { fontWeight:'800', letterSpacing:0.4 },
-  tcRef: { fontWeight:'700', color:'#3498DB', marginBottom:2 },
-  tcType: { fontWeight:'800', color:'#1a1a2e', marginBottom:3 },
-  tcAddr: { color:'#7F8C8D', lineHeight:16 },
-  tcPhone: { color:'#7F8C8D', marginTop:2 },
-  ttime: { alignSelf:'flex-start', backgroundColor:'#FDF2E9', borderRadius:20, paddingHorizontal:9, paddingVertical:3, marginVertical:6 },
-  ttimeUrgent: { backgroundColor:'#FDEDEC' },
-  ttimeTxt: { fontWeight:'700', color:'#E67E22' },
-  notas: { color:'#7F8C8D', fontStyle:'italic', marginBottom:6 },
-  abtn: { alignItems:'center', marginTop:8 },
-  abtnTxt: { fontWeight:'800', color:'#fff', letterSpacing:0.2 },
-  doneTag: { fontWeight:'700', color:'#27AE60', marginTop:8 },
-  empty: { alignItems:'center', paddingTop:60 },
-  emptyIc: { fontSize:48, marginBottom:12 },
-  emptyTxt: { color:'#7F8C8D', fontWeight:'700' },
-  emptySub: { fontSize:11, color:'#BDC3C7', marginTop:4 },
-  overlay: { flex:1, backgroundColor:'rgba(0,0,0,0.5)', justifyContent:'flex-end' },
-  sheet: { backgroundColor:'#fff', borderTopLeftRadius:20, borderTopRightRadius:20, padding:18, paddingBottom:32 },
-  handle: { width:36, height:3, backgroundColor:'#D5D8DC', borderRadius:2, alignSelf:'center', marginBottom:14 },
-  sheetTitle: { fontWeight:'800', color:'#1a1a2e', marginBottom:3 },
-  sheetSub: { color:'#7F8C8D', marginBottom:16 },
-  msec: { fontWeight:'700', color:'#7F8C8D', textTransform:'uppercase', letterSpacing:0.8, marginTop:12, marginBottom:6 },
-  optional: { color:'#BDC3C7', fontWeight:'400' },
-  minp: { backgroundColor:'#F2F3F4', borderWidth:1.5, borderColor:'#D5D8DC', borderRadius:9, padding:10, fontSize:12, color:'#1a1a2e' },
-  fotoBtn: { backgroundColor:'#F2F3F4', borderWidth:1.5, borderColor:'#D5D8DC', borderStyle:'dashed', borderRadius:10, padding:20, alignItems:'center' },
-  fotoBtnLbl: { fontWeight:'700', color:'#7F8C8D' },
-  fotoBtnSub: { color:'#BDC3C7', marginTop:2 },
-  fotoPreview: { backgroundColor:'#EBF5FB', borderWidth:1.5, borderColor:'#AED6F1', borderRadius:10, padding:10, flexDirection:'row', alignItems:'center', gap:10 },
-  fotoName: { fontWeight:'700', color:'#3498DB' },
-  pagoGrid: { flexDirection:'row', flexWrap:'wrap', gap:8 },
-  pagoOpt: { width:'47%', backgroundColor:'#F2F3F4', borderWidth:1.5, borderColor:'#D5D8DC', borderRadius:10, padding:12, alignItems:'center' },
-  pagoLbl: { fontWeight:'700', color:'#7F8C8D' },
-  montoRow: { flexDirection:'row', alignItems:'center', backgroundColor:'#F2F3F4', borderWidth:1.5, borderColor:'#D5D8DC', borderRadius:9, overflow:'hidden' },
-  montoPre: { padding:10, backgroundColor:'#D5D8DC' },
-  montoPreTxt: { fontWeight:'800', color:'#7F8C8D' },
-  montoInp: { flex:1, padding:10, fontSize:16, fontWeight:'800', color:'#1a1a2e' },
-  mActions: { flexDirection:'row', gap:8, marginTop:16 },
-  mCancel: { flex:1, padding:12, borderRadius:10, borderWidth:1.5, borderColor:'#D5D8DC', alignItems:'center' },
-  mCancelTxt: { fontWeight:'700', color:'#7F8C8D' },
-  mConfirm: { flex:2, padding:12, borderRadius:10, alignItems:'center' },
-  mConfirmTxt: { fontWeight:'800', color:'#fff' },
-  eOpt: { flexDirection:'row', alignItems:'center', gap:12, padding:13, borderRadius:12, borderWidth:1.5, borderColor:'#D5D8DC', marginBottom:8 },
-  eOptIc: { width:32, textAlign:'center' },
-  eOptName: { fontWeight:'800', color:'#1a1a2e' },
-  eOptDesc: { color:'#7F8C8D', marginTop:1 },
-  eCheck: { width:20, height:20, borderRadius:10, borderWidth:2, borderColor:'#D5D8DC', alignItems:'center', justifyContent:'center' },
-  confirmBtn: { borderRadius:12, padding:14, alignItems:'center', marginTop:8 },
-  confirmBtnTxt: { fontSize:14, fontWeight:'800', color:'#fff' },
-  cancelBtn: { padding:12, alignItems:'center' },
-  cancelBtnTxt: { fontSize:13, fontWeight:'700', color:'#7F8C8D' },
-  alertBox: { backgroundColor:'#fff', borderRadius:18, padding:24, margin:24, alignItems:'center' },
-  alertIc: { fontSize:40, marginBottom:8 },
-  alertTitle: { fontWeight:'800', color:'#1a1a2e', textAlign:'center', lineHeight:22, marginBottom:8 },
-  alertBody: { color:'#7F8C8D', textAlign:'center', lineHeight:18 },
-  tabBar: { flexDirection:'row', backgroundColor:'#fff', borderBottomWidth:1, borderBottomColor:'#E0E0E0', paddingHorizontal:8 },
-  tab: { flex:1, flexDirection:'row', alignItems:'center', justifyContent:'center', paddingVertical:12, borderBottomWidth:3, borderBottomColor:'transparent', gap:6 },
-  tabTxt: { fontSize:14, fontWeight:'700', color:'#7F8C8D' },
-  tabBadge: { borderRadius:10, paddingHorizontal:7, paddingVertical:2, minWidth:20, alignItems:'center' },
-  tabBadgeTxt: { fontSize:11, fontWeight:'800', color:'#fff' },
-  mapBtn: { borderWidth:1.5, borderRadius:8, paddingVertical:8, paddingHorizontal:12, flexDirection:'row', alignItems:'center', gap:4 },
-  mapBtnTxt: { fontSize:12, fontWeight:'700' },
-  mapBtnIc: { fontSize:14 },
+  root: { flex: 1, backgroundColor: '#f2f4f7' },
+
+  // Header - gradiente azul oscuro (simulado con fondo sólido)
+  header: { backgroundColor: '#0d2580', paddingHorizontal: 16, paddingTop: 12, paddingBottom: 14 },
+  hTop: { flexDirection: 'row', alignItems: 'center', gap: 10, marginBottom: 12 },
+  av: { width: 40, height: 40, borderRadius: 20, backgroundColor: '#3b82f6', alignItems: 'center', justifyContent: 'center', borderWidth: 2, borderColor: 'rgba(255,255,255,0.3)' },
+  avTxt: { fontSize: 17, fontWeight: '800', color: '#fff' },
+  hName: { fontSize: 15, fontWeight: '700', color: '#fff' },
+
+  // GPS badge - pill oscuro
+  gpsBadge: { flexDirection: 'row', alignItems: 'center', gap: 5, backgroundColor: 'rgba(0,0,0,0.25)', borderRadius: 20, paddingHorizontal: 10, paddingVertical: 5, borderWidth: 1, borderColor: 'rgba(255,255,255,0.1)' },
+  gpsDot: { width: 7, height: 7, borderRadius: 4 },
+  gpsTxt: { fontSize: 11, fontWeight: '600', color: '#fff' },
+
+  // Estado pill adaptado para header oscuro
+  estadoPill: { flexDirection: 'row', alignItems: 'center', gap: 4, paddingHorizontal: 10, paddingVertical: 6, borderRadius: 20, borderWidth: 1.5, marginLeft: 6 },
+  estadoPillIc: { fontSize: 13 },
+  estadoPillTxt: { fontSize: 10, fontWeight: '800' },
+
+  // Stats row - 3 glass cards
+  qsRow: { flexDirection: 'row', gap: 8 },
+  qs: { flex: 1, backgroundColor: 'rgba(255,255,255,0.1)', borderRadius: 10, padding: 8, alignItems: 'center', borderWidth: 1, borderColor: 'rgba(255,255,255,0.08)' },
+  qsGreen: {},
+  qsAmber: {},
+  qsVal: { fontSize: 18, fontWeight: '800', color: '#fff', lineHeight: 20 },
+  qsLbl: { fontSize: 9, fontWeight: '600', color: 'rgba(255,255,255,0.55)', textTransform: 'uppercase', letterSpacing: 0.5, marginTop: 2 },
+
+  // Banner de estado
+  banner: { flexDirection: 'row', alignItems: 'center', gap: 6, paddingHorizontal: 14, paddingVertical: 7, borderBottomWidth: 1, borderBottomColor: '#e2e8f0' },
+  bannerIc: { fontSize: 13 },
+  bannerTxt: { fontSize: 10, fontWeight: '700' },
+
+  // Tab bar - fondo azul oscuro
+  tabBar: { flexDirection: 'row', backgroundColor: '#0c257a', paddingHorizontal: 14, paddingVertical: 8, gap: 6, borderBottomWidth: 1, borderBottomColor: 'rgba(255,255,255,0.06)' },
+  tab: { flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', paddingVertical: 7, paddingHorizontal: 6, borderRadius: 8, gap: 6 },
+  tabActive: { backgroundColor: 'rgba(255,255,255,0.15)' },
+  tabTxt: { fontSize: 12, fontWeight: '700', color: 'rgba(255,255,255,0.5)', letterSpacing: 0.2 },
+  tabTxtActive: { color: '#fff' },
+  tabBadge: { backgroundColor: '#ef4444', borderRadius: 10, paddingHorizontal: 5, paddingVertical: 1, minWidth: 16, alignItems: 'center' },
+  tabBadgeTxt: { fontSize: 9, fontWeight: '800', color: '#fff', lineHeight: 14 },
+
+  // Lista
+  list: { padding: 12, paddingBottom: 32 },
+
+  // Separador de sección
+  sepRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingVertical: 6, paddingHorizontal: 2, marginBottom: 4 },
+  sepTitle: { fontSize: 10, fontWeight: '700', color: '#64748b', textTransform: 'uppercase', letterSpacing: 0.8 },
+  sepToggle: { flexDirection: 'row', alignItems: 'center', gap: 4, backgroundColor: '#e2e8f0', borderRadius: 6, paddingHorizontal: 8, paddingVertical: 4 },
+  sepToggleTxt: { fontSize: 11, fontWeight: '600', color: '#64748b' },
+  sepArrow: { fontSize: 9, color: '#64748b' },
+  sepCount: { backgroundColor: '#e2e8f0', borderRadius: 8, paddingHorizontal: 7, paddingVertical: 2 },
+  sepCountTxt: { fontSize: 10, fontWeight: '700', color: '#64748b' },
+
+  // Ticket card
+  tcard: { backgroundColor: '#fff', overflow: 'hidden', shadowColor: '#000', shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.07, shadowRadius: 4, elevation: 2, borderWidth: 1, borderColor: '#e8edf2' },
+  cardStrip: { height: 3 },
+  cardBody: { padding: 12 },
+
+  // Card top row
+  tcTop: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 8 },
+  cardMeta: { flex: 1, gap: 2 },
+  ticketCode: { fontSize: 12, fontWeight: '700', color: '#1e293b', letterSpacing: 0.3 },
+  ticketTime: { fontSize: 10, fontWeight: '500', color: '#94a3b8' },
+
+  // Badges
+  ticketBadgesRow: { flexDirection: 'row', gap: 4, alignItems: 'center', flexWrap: 'wrap', justifyContent: 'flex-end', maxWidth: '55%' },
+  tipoBadge: { paddingHorizontal: 7, paddingVertical: 3, borderRadius: 6, borderWidth: 1 },
+  tipoBadgeTxt: { fontSize: 9, fontWeight: '700', letterSpacing: 0.3 },
+  estadoBadge: { paddingHorizontal: 7, paddingVertical: 3, borderRadius: 6, borderWidth: 1 },
+  estadoBadgeTxt: { fontSize: 9, fontWeight: '700', letterSpacing: 0.3 },
+
+  // Reference block
+  refBlock: { flexDirection: 'row', alignItems: 'flex-start', gap: 6, marginBottom: 7, backgroundColor: '#f8fafc', borderRadius: 8, padding: 8, borderWidth: 1, borderColor: '#e2e8f0' },
+  refBlockIcon: { fontSize: 14, marginTop: 1 },
+  refName: { fontSize: 13, fontWeight: '700', color: '#1e293b', lineHeight: 18 },
+  refAddress: { fontSize: 11, color: '#64748b', marginTop: 1, lineHeight: 15 },
+
+  // Muestra row
+  muestraRow: { flexDirection: 'row', alignItems: 'center', gap: 5, marginBottom: 9 },
+  muestraIc: { fontSize: 12 },
+  muestraTxt: { fontSize: 11, color: '#475569', fontWeight: '600' },
+  muestraSep: { color: '#cbd5e1', fontSize: 11 },
+  horaLimitPill: { backgroundColor: '#f0fdf4', borderRadius: 5, paddingHorizontal: 6, paddingVertical: 2 },
+  horaLimitUrgent: { backgroundColor: '#fef2f2' },
+  horaLimitTxt: { fontSize: 10, fontWeight: '600', color: '#16a34a' },
+
+  notas: { color: '#7F8C8D', fontStyle: 'italic', marginBottom: 6 },
+
+  // Card actions — mapa izquierda (verde), principal derecha
+  cardActions: { flexDirection: 'row', gap: 6, marginTop: 2 },
+  mapBtn: { flexDirection: 'row', alignItems: 'center', gap: 4, backgroundColor: '#f0fdf4', borderWidth: 1, borderColor: '#bbf7d0', borderRadius: 9, paddingVertical: 9, paddingHorizontal: 12 },
+  mapBtnIc: { fontSize: 13 },
+  mapBtnTxt: { fontSize: 11, fontWeight: '700', color: '#16a34a' },
+  abtn: { alignItems: 'center', justifyContent: 'center' },
+  abtnTxt: { fontWeight: '800', color: '#fff', letterSpacing: 0.2 },
+  doneTag: { fontWeight: '700', color: '#27AE60', marginTop: 8 },
+
+  // Empty state
+  empty: { alignItems: 'center', paddingTop: 60 },
+  emptyIc: { fontSize: 48, marginBottom: 12 },
+  emptyTxt: { color: '#7F8C8D', fontWeight: '700' },
+  emptySub: { fontSize: 11, color: '#BDC3C7', marginTop: 4 },
+
+  // Modales
+  overlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'flex-end' },
+  sheet: { backgroundColor: '#fff', borderTopLeftRadius: 20, borderTopRightRadius: 20, padding: 18, paddingBottom: 32 },
+  handle: { width: 36, height: 3, backgroundColor: '#D5D8DC', borderRadius: 2, alignSelf: 'center', marginBottom: 14 },
+  sheetTitle: { fontWeight: '800', color: '#1a1a2e', marginBottom: 3 },
+  sheetSub: { color: '#7F8C8D', marginBottom: 16 },
+  msec: { fontWeight: '700', color: '#7F8C8D', textTransform: 'uppercase', letterSpacing: 0.8, marginTop: 12, marginBottom: 6 },
+  optional: { color: '#BDC3C7', fontWeight: '400' },
+  minp: { backgroundColor: '#F2F3F4', borderWidth: 1.5, borderColor: '#D5D8DC', borderRadius: 9, padding: 10, fontSize: 12, color: '#1a1a2e' },
+  fotoBtn: { backgroundColor: '#F2F3F4', borderWidth: 1.5, borderColor: '#D5D8DC', borderStyle: 'dashed', borderRadius: 10, padding: 20, alignItems: 'center' },
+  fotoBtnLbl: { fontWeight: '700', color: '#7F8C8D' },
+  fotoBtnSub: { color: '#BDC3C7', marginTop: 2 },
+  fotoPreview: { backgroundColor: '#EBF5FB', borderWidth: 1.5, borderColor: '#AED6F1', borderRadius: 10, padding: 10, flexDirection: 'row', alignItems: 'center', gap: 10 },
+  fotoName: { fontWeight: '700', color: '#3498DB' },
+  pagoGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
+  pagoOpt: { width: '47%', backgroundColor: '#F2F3F4', borderWidth: 1.5, borderColor: '#D5D8DC', borderRadius: 10, padding: 12, alignItems: 'center' },
+  pagoLbl: { fontWeight: '700', color: '#7F8C8D' },
+  montoRow: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#F2F3F4', borderWidth: 1.5, borderColor: '#D5D8DC', borderRadius: 9, overflow: 'hidden' },
+  montoPre: { padding: 10, backgroundColor: '#D5D8DC' },
+  montoPreTxt: { fontWeight: '800', color: '#7F8C8D' },
+  montoInp: { flex: 1, padding: 10, fontSize: 16, fontWeight: '800', color: '#1a1a2e' },
+  mActions: { flexDirection: 'row', gap: 8, marginTop: 16 },
+  mCancel: { flex: 1, padding: 12, borderRadius: 10, borderWidth: 1.5, borderColor: '#D5D8DC', alignItems: 'center' },
+  mCancelTxt: { fontWeight: '700', color: '#7F8C8D' },
+  mConfirm: { flex: 2, padding: 12, borderRadius: 10, alignItems: 'center' },
+  mConfirmTxt: { fontWeight: '800', color: '#fff' },
+  eOpt: { flexDirection: 'row', alignItems: 'center', gap: 12, padding: 13, borderRadius: 12, borderWidth: 1.5, borderColor: '#D5D8DC', marginBottom: 8 },
+  eOptIc: { width: 32, textAlign: 'center' },
+  eOptName: { fontWeight: '800', color: '#1a1a2e' },
+  eOptDesc: { color: '#7F8C8D', marginTop: 1 },
+  eCheck: { width: 20, height: 20, borderRadius: 10, borderWidth: 2, borderColor: '#D5D8DC', alignItems: 'center', justifyContent: 'center' },
+  confirmBtn: { borderRadius: 12, padding: 14, alignItems: 'center', marginTop: 8 },
+  confirmBtnTxt: { fontSize: 14, fontWeight: '800', color: '#fff' },
+  cancelBtn: { padding: 12, alignItems: 'center' },
+  cancelBtnTxt: { fontSize: 13, fontWeight: '700', color: '#7F8C8D' },
+  alertBox: { backgroundColor: '#fff', borderRadius: 18, padding: 24, margin: 24, alignItems: 'center' },
+  alertIc: { fontSize: 40, marginBottom: 8 },
+  alertTitle: { fontWeight: '800', color: '#1a1a2e', textAlign: 'center', lineHeight: 22, marginBottom: 8 },
+  alertBody: { color: '#7F8C8D', textAlign: 'center', lineHeight: 18 },
 });

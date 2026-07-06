@@ -189,12 +189,15 @@ export const useTracking = () => {
         console.warn('[Tracking] Error registrando Background Fetch:', e);
       }
 
+      // 6. Iniciar polling foreground (WS cada 5s) — active.current ya es true
+      await restartForeground();
+
       return true;
     } catch (err) {
       console.warn('[Tracking] Error iniciando tracking:', err);
       return false;
     }
-  }, []);
+  }, [restartForeground]);
 
   const stopTracking = useCallback(async () => {
     if (!active.current) return;

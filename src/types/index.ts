@@ -11,6 +11,7 @@ export interface User {
 
 export interface Ticket {
   id: string;
+  codigo?: string;
   estado: EstadoTicket;
   prioridad: 'ALTA' | 'MEDIA' | 'BAJA';
   tipoMuestra?: string;
