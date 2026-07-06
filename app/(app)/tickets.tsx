@@ -883,4 +883,12 @@ const s = StyleSheet.create({
   alertIc: { fontSize:40, marginBottom:8 },
   alertTitle: { fontWeight:'800', color:'#1a1a2e', textAlign:'center', lineHeight:22, marginBottom:8 },
   alertBody: { color:'#7F8C8D', textAlign:'center', lineHeight:18 },
+  tabBar: { flexDirection:'row', backgroundColor:'#fff', borderBottomWidth:1, borderBottomColor:'#E0E0E0', paddingHorizontal:8 },
+  tab: { flex:1, flexDirection:'row', alignItems:'center', justifyContent:'center', paddingVertical:12, borderBottomWidth:3, borderBottomColor:'transparent', gap:6 },
+  tabTxt: { fontSize:14, fontWeight:'700', color:'#7F8C8D' },
+  tabBadge: { borderRadius:10, paddingHorizontal:7, paddingVertical:2, minWidth:20, alignItems:'center' },
+  tabBadgeTxt: { fontSize:11, fontWeight:'800', color:'#fff' },
+  mapBtn: { borderWidth:1.5, borderRadius:8, paddingVertical:8, paddingHorizontal:12, flexDirection:'row', alignItems:'center', gap:4 },
+  mapBtnTxt: { fontSize:12, fontWeight:'700' },
+  mapBtnIc: { fontSize:14 },
 });
