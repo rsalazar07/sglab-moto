@@ -9,7 +9,7 @@ import { api } from '../../src/api/client';
 import { disconnectSocket } from '../../src/socket/socket';
 import { deactivateKeepAwake } from 'expo-keep-awake';
 import { send as log } from '../../src/lib/LogReporter';
-import { forceStopAllTracking } from '../../src/hooks/useTracking';
+import { useTracking } from '../../src/hooks/useTracking';
 
 // Colores por defecto (fallback si no carga config del VPS)
 const FALLBACK = {
@@ -82,10 +82,12 @@ export default function DiaScreen() {
         // DESPUÉS: tareas de limpieza en segundo plano
         (async () => {
           try {
-            await forceStopAllTracking();
+            // Intentar detener tracking por API (sin depender del hook)
+            try { await api.patch('/motorizados/me/estado', { estado: 'OFFLINE' }); } catch {}
+            try { await api.post('/tracking/stop', {}); } catch {}
             deactivateKeepAwake();
             disconnectSocket();
-            try { await api.patch('/motorizados/me/estado', { estado: 'OFFLINE' }); } catch (e) { log('WARN', 'dia', 'Error estado OFFLOAD: ' + String(e)); }
+            try { await api.patch('/motorizados/me/estado', { estado: 'OFFLINE' }); } catch (e) { log('WARN', 'dia', 'Error estado: ' + String(e)); }
             try { await authApi.logout(); } catch (e) { console.error('[DIA LOGOUT] Error API:', e); log('WARN', 'logout', String(e)); }
           } catch (e) {
             console.error('[DIA LOGOUT] Error limpieza:', e);
