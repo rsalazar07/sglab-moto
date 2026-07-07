@@ -199,7 +199,7 @@ const TicketCard = memo(({ item, config, loadingId, onAvanzar }: {
         )}
 
         {/* Acciones: MAPA a la IZQUIERDA (verde), principal a la DERECHA */}
-        {!isDone && (!!btnLabel || showMapBtn) && (
+        {(showMapBtn || (!isDone && !!btnLabel)) && (
           <View style={s.cardActions}>
             {showMapBtn && (
               <TouchableOpacity
@@ -211,7 +211,7 @@ const TicketCard = memo(({ item, config, loadingId, onAvanzar }: {
                 <Text style={s.mapBtnTxt}>Llegar</Text>
               </TouchableOpacity>
             )}
-            {!!btnLabel && (
+            {!isDone && !!btnLabel && (
               <TouchableOpacity
                 style={[s.abtn, {
                   flex: 1,
@@ -565,7 +565,7 @@ export default function TicketsScreen() {
 
   const eActual = config?.estadosMoto?.[estadoMoto] || {};
 
-  const tabLabelPendientes = UL.tabPendientes || 'Disponibles';
+  const tabLabelPendientes = UL.tabPendientes || 'Pendientes';
   const tabLabelMiRuta = UL.tabMiRuta || 'Mi Ruta';
   const seccionEnCurso = UL.seccionEnCurso || 'En curso';
   const seccionCompletados = UL.seccionCompletados || 'Completados hoy';

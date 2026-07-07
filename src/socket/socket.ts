@@ -8,7 +8,7 @@ const WS_URL = process.env.EXPO_PUBLIC_WS_URL ?? 'wss://recojossglab.duckdns.org
 let socket: Socket | null = null;
 
 export const getSocket = async (onSessionRevoked?: () => void): Promise<Socket> => {
-  if (socket?.connected) return socket;
+  if (socket) return socket;
 
   const token = await SecureStore.getItemAsync('accessToken');
   socket = io(`${WS_URL}/ws`, {
