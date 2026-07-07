@@ -7,11 +7,11 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { activateKeepAwakeAsync, deactivateKeepAwake } from 'expo-keep-awake';
 import * as ImagePicker from 'expo-image-picker';
+import * as SecureStore from 'expo-secure-store';
 import { ticketsApi } from '../../src/api/tickets';
 import { useTracking } from '../../src/hooks/useTracking';
 import { useAuthStore } from '../../src/store/authStore';
 import { getSocket, disconnectSocket } from '../../src/socket/socket';
-import { authApi } from '../../src/api/auth';
 import { api } from '../../src/api/client';
 import { router } from 'expo-router';
 import { send as log } from '../../src/lib/LogReporter';
@@ -430,18 +430,19 @@ export default function TicketsScreen() {
   };
 
   const logout = () => {
-    console.log('[LOGOUT] Botón presionado');
     Alert.alert('Cerrar sesión', '¿Seguro que quieres salir?', [
       { text: 'Cancelar', style: 'cancel' },
       { text: 'Salir', style: 'destructive', onPress: () => {
-        console.log('[LOGOUT] Confirmó salida');
+        // Borrar tokens inmediatamente (fire-and-forget) para que no persistan si la app se cierra
+        SecureStore.deleteItemAsync('accessToken').catch(() => {});
+        SecureStore.deleteItemAsync('refreshToken').catch(() => {});
         clearUser();
         router.replace('/login');
         (async () => {
           try {
-            if (turnoActivo) { console.log('[LOGOUT] Finalizando turno'); await finalizarTurno(); }
+            if (turnoActivo) await finalizarTurno();
             disconnectSocket();
-            try { await authApi.logout(); } catch (e) { console.error('[LOGOUT] Error API:', e); log('ERROR', 'logout', String(e)); }
+            try { await api.post('/auth/logout'); } catch (e) { log('ERROR', 'logout', String(e)); }
           } catch (e) {
             console.error('[LOGOUT] Error limpieza:', e);
           }
