@@ -17,6 +17,60 @@ import { router } from 'expo-router';
 import { send as log } from '../../src/lib/LogReporter';
 import type { Ticket, EstadoTicket } from '../../src/types';
 
+// ─── Stepper de progreso para tab Mi Ruta ───
+const PROGRESS_STEPS = [
+  { label: 'Tomado', icon: '📋' },
+  { label: 'En ruta', icon: '🏍️' },
+  { label: 'Recojo', icon: '🧪' },
+  { label: 'Entregado', icon: '✅' },
+];
+const STEP_IDX: Record<string, number> = {
+  ASIGNADO: 0, EN_RUTA: 1, EN_RECOJO: 2, RECOGIDO: 2,
+  EN_LABORATORIO: 3, ENTREGADO: 3, CERRADO: 4,
+};
+
+const ProgressStepper = memo(({ estado, C }: { estado: string; C: any }) => {
+  const currentStep = STEP_IDX[estado] ?? 0;
+  const green = C?.green || '#22c55e';
+  const blue  = C?.blue  || '#3b82f6';
+  return (
+    <View style={ps.wrap}>
+      {/* Fila de puntos y líneas */}
+      <View style={ps.track}>
+        {PROGRESS_STEPS.map((step, i) => {
+          const done   = i < currentStep;
+          const active = i === currentStep;
+          const dotBg  = done ? green : active ? blue : '#e2e8f0';
+          const lineClr = i < currentStep ? green : '#e2e8f0';
+          return (
+            <View key={i} style={{ flexDirection: 'row', alignItems: 'center', flex: i < PROGRESS_STEPS.length - 1 ? 1 : 0 }}>
+              <View style={[ps.dot, { backgroundColor: dotBg, borderColor: dotBg }]}>
+                <Text style={ps.dotTxt}>{done ? '✓' : active ? step.icon : String(i + 1)}</Text>
+              </View>
+              {i < PROGRESS_STEPS.length - 1 && (
+                <View style={{ flex: 1, height: 2, backgroundColor: lineClr }} />
+              )}
+            </View>
+          );
+        })}
+      </View>
+      {/* Labels */}
+      <View style={ps.labels}>
+        {PROGRESS_STEPS.map((step, i) => {
+          const done   = i < currentStep;
+          const active = i === currentStep;
+          return (
+            <Text key={i} style={[ps.label, {
+              color: done ? green : active ? blue : '#94a3b8',
+              textAlign: i === 0 ? 'left' : i === PROGRESS_STEPS.length - 1 ? 'right' : 'center',
+            }]}>{step.label}</Text>
+          );
+        })}
+      </View>
+    </View>
+  );
+});
+
 // Colores por defecto (fallback si no hay config)
 const C_FALLBACK = {
   blue:'#3498DB', blueDark:'#2980B9', blueLight:'#EBF5FB', blueBorder:'#AED6F1',
@@ -130,7 +184,10 @@ const TicketCard = memo(({ item, config, loadingId, onAvanzar }: {
   const isOverdue = item.horaLimite ? new Date(item.horaLimite) < new Date() : false;
 
   return (
-    <View style={[s.tcard, { borderRadius: DT?.borderRadius?.card ?? 14 }]}>
+    <View style={[s.tcard, {
+      borderRadius: DT?.borderRadius?.card ?? 14,
+      backgroundColor: (!isDone && esUrgente) ? '#fff5f5' : '#fff',
+    }]}>
       {/* Franja horizontal superior */}
       <View style={[s.cardStrip, { backgroundColor: stripColor }]} />
 
@@ -193,6 +250,16 @@ const TicketCard = memo(({ item, config, loadingId, onAvanzar }: {
             </>
           )}
         </View>
+
+        {/* Chip teléfono */}
+        {!isDone && (item.referencia?.telefono || item.telefonoContacto) && (
+          <View style={[s.muestraRow, { marginBottom: 5 }]}>
+            <Text style={s.muestraIc}>📞</Text>
+            <Text style={[s.muestraTxt, { fontSize: fs.small || 11 }]}>
+              {item.referencia?.telefono || item.telefonoContacto}
+            </Text>
+          </View>
+        )}
 
         {(screen.showNotas !== false) && item.notas && !isDone && (
           <Text style={[s.notas, { fontSize: fs.small || 10 }]}>📝 {item.notas}</Text>
@@ -268,6 +335,7 @@ export default function TicketsScreen() {
   const currentTicketId = useRef<string | null>(null);
   const [activeTab, setActiveTab] = useState<'pendientes' | 'mi-ruta'>('pendientes');
   const [completadosExpanded, setCompletadosExpanded] = useState(false);
+  const [motorizadoData, setMotorizadoData] = useState<{ placa?: string; vehiculo?: string } | null>(null);
   const { startTracking, stopTracking } = useTracking();
 
   // ─── Leer configuración SDUI desde VPS ───
@@ -300,6 +368,7 @@ export default function TicketsScreen() {
   useEffect(() => {
     cargarTickets();
     fetchConfig();
+    api.get('/motorizados/me').then(r => setMotorizadoData(r.data)).catch(() => {});
     const initSocket = async () => {
       const socket = await getSocket();
       socket.off('ticket:new');
@@ -574,7 +643,7 @@ export default function TicketsScreen() {
     ? tabData.pendientesArr
     : [
       ...(tabData.enCurso.length > 0 ? [{ _sep: seccionEnCurso, _count: tabData.enCurso.length, _color: C.blue }] : []),
-      ...tabData.enCurso,
+      ...tabData.enCurso.map(t => ({ ...t, _inCurso: true })),
       { _sep: seccionCompletados, _count: tabData.completadosArr.length, _color: C.green, _collapsible: true },
       ...(completadosExpanded ? tabData.completadosArr : []),
     ];
@@ -593,6 +662,11 @@ export default function TicketsScreen() {
           )}
           <View style={{ flex: 1 }}>
             <Text style={s.hName}>{user?.nombre ?? 'Motorizado'}</Text>
+            {(motorizadoData?.vehiculo || motorizadoData?.placa) ? (
+              <Text style={s.hSub}>
+                {[motorizadoData?.vehiculo, motorizadoData?.placa ? `Placa ${motorizadoData.placa}` : null].filter(Boolean).join(' · ')}
+              </Text>
+            ) : null}
           </View>
           {(screen.showGpsStatus !== false) && (
           <View style={s.gpsBadge}>
@@ -610,6 +684,9 @@ export default function TicketsScreen() {
             <Text style={[s.estadoPillTxt, { color: eActual.color || '#fff' }]}>{eActual.label || 'Estado'}</Text>
           </TouchableOpacity>
           )}
+          <TouchableOpacity onPress={logout} style={s.hLogoutBtn} activeOpacity={0.7}>
+            <Text style={s.hLogoutIc}>⏻</Text>
+          </TouchableOpacity>
         </View>
 
         {/* Stats header — 3 chips: pendientes, en ruta, recogidos */}
@@ -697,6 +774,14 @@ export default function TicketsScreen() {
                     <Text style={s.sepCountTxt}>{item._count}</Text>
                   </View>
                 )}
+              </View>
+            );
+          }
+          if (item._inCurso) {
+            return (
+              <View>
+                <ProgressStepper estado={item.estado} C={C} />
+                <TicketCard item={item} config={config} loadingId={loadingId} onAvanzar={avanzarEstado} />
               </View>
             );
           }
@@ -898,6 +983,9 @@ const s = StyleSheet.create({
   av: { width: 40, height: 40, borderRadius: 20, backgroundColor: '#3b82f6', alignItems: 'center', justifyContent: 'center', borderWidth: 2, borderColor: 'rgba(255,255,255,0.3)' },
   avTxt: { fontSize: 17, fontWeight: '800', color: '#fff' },
   hName: { fontSize: 15, fontWeight: '700', color: '#fff' },
+  hSub: { fontSize: 10, color: 'rgba(255,255,255,0.6)', marginTop: 1 },
+  hLogoutBtn: { width: 32, height: 32, borderRadius: 16, backgroundColor: 'rgba(255,255,255,0.1)', alignItems: 'center', justifyContent: 'center', marginLeft: 4 },
+  hLogoutIc: { fontSize: 14, color: 'rgba(255,255,255,0.85)' },
 
   // GPS badge - pill oscuro
   gpsBadge: { flexDirection: 'row', alignItems: 'center', gap: 5, backgroundColor: 'rgba(0,0,0,0.25)', borderRadius: 20, paddingHorizontal: 10, paddingVertical: 5, borderWidth: 1, borderColor: 'rgba(255,255,255,0.1)' },
@@ -1032,4 +1120,14 @@ const s = StyleSheet.create({
   alertIc: { fontSize: 40, marginBottom: 8 },
   alertTitle: { fontWeight: '800', color: '#1a1a2e', textAlign: 'center', lineHeight: 22, marginBottom: 8 },
   alertBody: { color: '#7F8C8D', textAlign: 'center', lineHeight: 18 },
+});
+
+// Estilos del ProgressStepper (separados para no contaminar el StyleSheet principal)
+const ps = StyleSheet.create({
+  wrap: { backgroundColor: '#f0f7ff', borderRadius: 10, padding: 10, marginBottom: 6, borderWidth: 1, borderColor: '#dbeafe' },
+  track: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 4 },
+  dot: { width: 26, height: 26, borderRadius: 13, alignItems: 'center', justifyContent: 'center', borderWidth: 2 },
+  dotTxt: { fontSize: 11, fontWeight: '800', color: '#fff' },
+  labels: { flexDirection: 'row', marginTop: 5, paddingHorizontal: 0 },
+  label: { flex: 1, fontSize: 9, fontWeight: '700', letterSpacing: 0.2 },
 });
