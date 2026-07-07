@@ -654,20 +654,30 @@ export default function TicketsScreen() {
       {/* ─── HEADER gradiente azul oscuro ─── */}
       {(screen.showHeader !== false) && (
       <View style={s.header}>
-        <View style={s.hTop}>
+        {/* Fila 1: avatar + nombre/placa (flex:1) + logout */}
+        <View style={s.hRow1}>
           {(screen.showAvatar !== false) && (
           <View style={s.av}>
             <Text style={s.avTxt}>{user?.nombre?.[0]?.toUpperCase() ?? '🏍'}</Text>
           </View>
           )}
-          <View style={{ flex: 1 }}>
-            <Text style={s.hName}>{user?.nombre ?? 'Motorizado'}</Text>
+          <View style={s.hNameBlock}>
+            <Text style={s.hName} numberOfLines={1} ellipsizeMode="tail">
+              {user?.nombre ?? 'Motorizado'}
+            </Text>
             {(motorizadoData?.vehiculo || motorizadoData?.placa) ? (
-              <Text style={s.hSub}>
+              <Text style={s.hSub} numberOfLines={1} ellipsizeMode="tail">
                 {[motorizadoData?.vehiculo, motorizadoData?.placa ? `Placa ${motorizadoData.placa}` : null].filter(Boolean).join(' · ')}
               </Text>
             ) : null}
           </View>
+          <TouchableOpacity onPress={logout} style={s.hLogoutBtn} activeOpacity={0.7}>
+            <Text style={s.hLogoutIc}>⏻</Text>
+          </TouchableOpacity>
+        </View>
+
+        {/* Fila 2: GPS pill + estado pill en la misma fila */}
+        <View style={s.hRow2}>
           {(screen.showGpsStatus !== false) && (
           <View style={s.gpsBadge}>
             <View style={[s.gpsDot, { backgroundColor: eActual.gpsColor || '#22c55e' }]} />
@@ -684,9 +694,6 @@ export default function TicketsScreen() {
             <Text style={[s.estadoPillTxt, { color: eActual.color || '#fff' }]}>{eActual.label || 'Estado'}</Text>
           </TouchableOpacity>
           )}
-          <TouchableOpacity onPress={logout} style={s.hLogoutBtn} activeOpacity={0.7}>
-            <Text style={s.hLogoutIc}>⏻</Text>
-          </TouchableOpacity>
         </View>
 
         {/* Stats header — 3 chips: pendientes, en ruta, recogidos */}
@@ -709,11 +716,13 @@ export default function TicketsScreen() {
       </View>
       )}
 
-      {/* Banner de estado */}
+      {/* Banner de estado — solo si tiene contenido */}
+      {!!(eActual.bannerIc || eActual.bannerTxt) && (
       <View style={[s.banner, { backgroundColor: eActual.bg || '#f8fafc' }]}>
         <Text style={s.bannerIc}>{eActual.bannerIc || ''}</Text>
         <Text style={[s.bannerTxt, { color: eActual.color || '#64748b' }]}>{eActual.bannerTxt || ''}</Text>
       </View>
+      )}
 
       {/* ─── TAB BAR fondo azul oscuro ─── */}
       <View style={s.tabBar}>
@@ -977,32 +986,37 @@ export default function TicketsScreen() {
 const s = StyleSheet.create({
   root: { flex: 1, backgroundColor: '#f2f4f7' },
 
-  // Header - gradiente azul oscuro (simulado con fondo sólido)
-  header: { backgroundColor: '#0d2580', paddingHorizontal: 16, paddingTop: 12, paddingBottom: 14 },
-  hTop: { flexDirection: 'row', alignItems: 'center', gap: 10, marginBottom: 12 },
-  av: { width: 40, height: 40, borderRadius: 20, backgroundColor: '#3b82f6', alignItems: 'center', justifyContent: 'center', borderWidth: 2, borderColor: 'rgba(255,255,255,0.3)' },
-  avTxt: { fontSize: 17, fontWeight: '800', color: '#fff' },
+  // Header - compacto
+  header: { backgroundColor: '#0d2580', paddingHorizontal: 14, paddingTop: 10, paddingBottom: 10 },
+  // Fila 1: avatar + nombre (flex:1) + logout
+  hRow1: { flexDirection: 'row', alignItems: 'center', marginBottom: 8 },
+  av: { width: 38, height: 38, borderRadius: 19, backgroundColor: '#3b82f6', alignItems: 'center', justifyContent: 'center', borderWidth: 2, borderColor: 'rgba(255,255,255,0.3)', flexShrink: 0 },
+  avTxt: { fontSize: 16, fontWeight: '800', color: '#fff' },
+  hNameBlock: { flex: 1, marginHorizontal: 9, minWidth: 0 },
   hName: { fontSize: 15, fontWeight: '700', color: '#fff' },
   hSub: { fontSize: 10, color: 'rgba(255,255,255,0.6)', marginTop: 1 },
-  hLogoutBtn: { width: 32, height: 32, borderRadius: 16, backgroundColor: 'rgba(255,255,255,0.1)', alignItems: 'center', justifyContent: 'center', marginLeft: 4 },
+  hLogoutBtn: { width: 32, height: 32, borderRadius: 16, backgroundColor: 'rgba(255,255,255,0.1)', alignItems: 'center', justifyContent: 'center', flexShrink: 0 },
   hLogoutIc: { fontSize: 14, color: 'rgba(255,255,255,0.85)' },
+
+  // Fila 2: GPS pill + estado pill alineados
+  hRow2: { flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 8 },
 
   // GPS badge - pill oscuro
   gpsBadge: { flexDirection: 'row', alignItems: 'center', gap: 5, backgroundColor: 'rgba(0,0,0,0.25)', borderRadius: 20, paddingHorizontal: 10, paddingVertical: 5, borderWidth: 1, borderColor: 'rgba(255,255,255,0.1)' },
   gpsDot: { width: 7, height: 7, borderRadius: 4 },
   gpsTxt: { fontSize: 11, fontWeight: '600', color: '#fff' },
 
-  // Estado pill adaptado para header oscuro
-  estadoPill: { flexDirection: 'row', alignItems: 'center', gap: 4, paddingHorizontal: 10, paddingVertical: 6, borderRadius: 20, borderWidth: 1.5, marginLeft: 6 },
+  // Estado pill
+  estadoPill: { flexDirection: 'row', alignItems: 'center', gap: 4, paddingHorizontal: 10, paddingVertical: 5, borderRadius: 20, borderWidth: 1.5 },
   estadoPillIc: { fontSize: 13 },
   estadoPillTxt: { fontSize: 10, fontWeight: '800' },
 
-  // Stats row - 3 glass cards
-  qsRow: { flexDirection: 'row', gap: 8 },
-  qs: { flex: 1, backgroundColor: 'rgba(255,255,255,0.1)', borderRadius: 10, padding: 8, alignItems: 'center', borderWidth: 1, borderColor: 'rgba(255,255,255,0.08)' },
+  // Stats row - 3 glass cards compactas
+  qsRow: { flexDirection: 'row', gap: 6 },
+  qs: { flex: 1, backgroundColor: 'rgba(255,255,255,0.1)', borderRadius: 8, paddingVertical: 6, paddingHorizontal: 4, alignItems: 'center', borderWidth: 1, borderColor: 'rgba(255,255,255,0.08)' },
   qsGreen: {},
   qsAmber: {},
-  qsVal: { fontSize: 18, fontWeight: '800', color: '#fff', lineHeight: 20 },
+  qsVal: { fontSize: 16, fontWeight: '800', color: '#fff', lineHeight: 18 },
   qsLbl: { fontSize: 9, fontWeight: '600', color: 'rgba(255,255,255,0.55)', textTransform: 'uppercase', letterSpacing: 0.5, marginTop: 2 },
 
   // Banner de estado
