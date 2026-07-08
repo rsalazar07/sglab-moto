@@ -73,27 +73,18 @@ export default function DiaScreen() {
     Alert.alert('Cerrar sesión', '¿Seguro que quieres cerrar sesión?', [
       { text: 'Cancelar', style: 'cancel' },
       { text: 'Salir', style: 'destructive', onPress: async () => {
-        // Borrar tokens inmediatamente (fire-and-forget) para que no persistan si la app se cierra
-        SecureStore.deleteItemAsync('accessToken').catch(() => {});
-        SecureStore.deleteItemAsync('refreshToken').catch(() => {});
-        await forceStopAllTracking();
-        deactivateKeepAwake();
-        disconnectSocket();
-        try { await api.patch('/motorizados/me/estado', { estado: 'OFFLINE' }); } catch (e) { log('WARN', 'dia', 'Error estado OFFLOAD: ' + String(e)); }
-        try { await authApi.logout(); } catch {}
+        // PASO 1: Limpiar estado y navegar al login INMEDIATAMENTE
         clearUser();
         router.replace('/login');
-        (async () => {
-          try {
-            try { await api.patch('/motorizados/me/estado', { estado: 'OFFLINE' }); } catch {}
-            try { await api.post('/tracking/stop', {}); } catch {}
-            deactivateKeepAwake();
-            disconnectSocket();
-            try { await api.post('/auth/logout'); } catch (e) { log('WARN', 'logout', String(e)); }
-          } catch (e) {
-            console.error('[DIA LOGOUT] Error limpieza:', e);
-          }
-        })();
+        // PASO 2: Borrar tokens (fire-and-forget)
+        SecureStore.deleteItemAsync('accessToken').catch(() => {});
+        SecureStore.deleteItemAsync('refreshToken').catch(() => {});
+        // PASO 3: Cleanup en segundo plano (no debe impedir el logout)
+        try { await api.post('/tracking/stop', {}); } catch {}
+        try { await api.patch('/motorizados/me/estado', { estado: 'OFFLINE' }); } catch {}
+        try { await api.post('/auth/logout'); } catch {}
+        deactivateKeepAwake();
+        disconnectSocket();
       }},
     ]);
   };
