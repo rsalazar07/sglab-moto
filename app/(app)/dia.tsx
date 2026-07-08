@@ -72,10 +72,15 @@ export default function DiaScreen() {
   const logout = () => {
     Alert.alert('Cerrar sesión', '¿Seguro que quieres cerrar sesión?', [
       { text: 'Cancelar', style: 'cancel' },
-      { text: 'Salir', style: 'destructive', onPress: () => {
+      { text: 'Salir', style: 'destructive', onPress: async () => {
         // Borrar tokens inmediatamente (fire-and-forget) para que no persistan si la app se cierra
         SecureStore.deleteItemAsync('accessToken').catch(() => {});
         SecureStore.deleteItemAsync('refreshToken').catch(() => {});
+        await forceStopAllTracking();
+        deactivateKeepAwake();
+        disconnectSocket();
+        try { await api.patch('/motorizados/me/estado', { estado: 'OFFLINE' }); } catch (e) { log('WARN', 'dia', 'Error estado OFFLOAD: ' + String(e)); }
+        try { await authApi.logout(); } catch {}
         clearUser();
         router.replace('/login');
         (async () => {

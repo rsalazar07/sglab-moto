@@ -377,6 +377,7 @@ export default function TicketsScreen() {
       socket.on('ticket:new', async (data: { ticketId: string }) => {
         try {
           const { data: t } = await api.get(`/tickets/${data.ticketId}`);
+          if (t.motorizadoId && t.motorizadoId !== user?.id) return;
           setTickets(prev => {
             if (prev.some(x => x.id === t.id)) return prev;
             return [t, ...prev];
@@ -384,10 +385,13 @@ export default function TicketsScreen() {
         } catch {}
       });
 
-      socket.on('ticket:update', (data: { ticketId: string; estado: EstadoTicket; motorizadoNombre?: string; timestamp?: string }) => {
-        setTickets(prev =>
-          prev.map(t => t.id === data.ticketId ? { ...t, estado: data.estado } : t)
-        );
+      socket.on('ticket:update', (data: { ticketId: string; estado: EstadoTicket; motorizadoId?: string; motorizadoNombre?: string; timestamp?: string }) => {
+        setTickets(prev => {
+          if (data.motorizadoId !== undefined && data.motorizadoId !== user?.id) {
+            return prev.filter(t => t.id !== data.ticketId);
+          }
+          return prev.map(t => t.id === data.ticketId ? { ...t, estado: data.estado } : t);
+        });
       });
     };
     initSocket();
