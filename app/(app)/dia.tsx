@@ -3,6 +3,7 @@ import { useState, useEffect, useCallback } from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, Alert, ScrollView } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useAuthStore } from '../../src/store/authStore';
+import { useTicketsStore } from '../../src/store/ticketsStore';
 import { ticketsApi } from '../../src/api/tickets';
 import { api } from '../../src/api/client';
 import { disconnectSocket } from '../../src/socket/socket';
@@ -21,7 +22,7 @@ export default function DiaScreen() {
   const user = useAuthStore((s) => s.user);
   const clearUser = useAuthStore((s) => s.clearUser);
   const [motoData, setMotoData] = useState<any>(null);
-  const [tickets, setTickets] = useState<any[]>([]);
+  const tickets = useTicketsStore((s) => s.tickets);
   const [C, setC] = useState(FALLBACK);
   const [dash, setDash] = useState<any>(null);
   const [designTokens, setDesignTokens] = useState<any>(null);
@@ -48,6 +49,7 @@ export default function DiaScreen() {
         ticketsApi.getMisTickets(),
       ]);
       setMotoData(moto);
+      const setTickets = useTicketsStore.getState().setTickets;
       setTickets(tks);
     } catch (e) {
       log('ERROR', 'dia', `cargar inicial: ${e instanceof Error ? e.message : String(e)}`);

@@ -11,6 +11,7 @@ import * as SecureStore from 'expo-secure-store';
 import { ticketsApi } from '../../src/api/tickets';
 import { useTracking } from '../../src/hooks/useTracking';
 import { useAuthStore } from '../../src/store/authStore';
+import { useTicketsStore } from '../../src/store/ticketsStore';
 import { getSocket, disconnectSocket } from '../../src/socket/socket';
 import { api } from '../../src/api/client';
 import { router } from 'expo-router';
@@ -357,6 +358,7 @@ export default function TicketsScreen() {
     try {
       const data = await ticketsApi.getMisTickets();
       setTickets(data);
+      useTicketsStore.getState().setTickets(data);
     } catch (e) {
       console.error('Error cargando tickets:', e);
       log('ERROR', 'tickets', `cargarTickets: ${e instanceof Error ? e.message : String(e)}`);
@@ -376,39 +378,16 @@ export default function TicketsScreen() {
     cargarTickets();
     fetchConfig();
     api.get('/motorizados/me').then(r => setMotorizadoData(r.data)).catch(() => {});
-    const initSocket = async () => {
-      const socket = await getSocket();
-      socket.off('ticket:new');
-      socket.off('ticket:update');
-
-      socket.on('ticket:new', async (data: { ticketId: string }) => {
-        try {
-          const { data: t } = await api.get(`/tickets/${data.ticketId}`);
-          if (t.motorizadoId && t.motorizadoId !== user?.id) return;
-          setTickets(prev => {
-            if (prev.some(x => x.id === t.id)) return prev;
-            return [t, ...prev];
-          });
-        } catch {}
-      });
-
-      socket.on('ticket:update', (data: { ticketId: string; estado: EstadoTicket; motorizadoId?: string; motorizadoNombre?: string; timestamp?: string }) => {
-        setTickets(prev => {
-          if (data.motorizadoId !== undefined && data.motorizadoId !== user?.id) {
-            return prev.filter(t => t.id !== data.ticketId);
-          }
-          return prev.map(t => t.id === data.ticketId ? { ...t, estado: data.estado } : t);
-        });
-      });
-    };
-    initSocket();
-    return () => {
-      getSocket().then(s => {
-        s.off('ticket:new');
-        s.off('ticket:update');
-      });
-    };
   }, []);
+
+  // Sincronizar con el store compartido (actualizado por _layout.tsx via socket)
+  const storeTickets = useTicketsStore((s) => s.tickets);
+  const triggerRefresh = useTicketsStore((s) => s.triggerRefresh);
+  useEffect(() => {
+    if (storeTickets.length > 0) {
+      setTickets(storeTickets);
+    }
+  }, [triggerRefresh]);
 
   const onRefresh = async () => {
     setRefreshing(true);
