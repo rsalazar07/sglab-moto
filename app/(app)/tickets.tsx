@@ -210,6 +210,13 @@ const TicketCard = memo(({ item, config, loadingId, onAvanzar }: {
                 </Text>
               </View>
             )}
+            {!isDone && item.modalidad === 'ENTREGA_RESULTADOS' && (
+              <View style={[s.tipoBadge, { backgroundColor: '#f0fdf4', borderColor: '#86efac' }]}>
+                <Text style={[s.tipoBadgeTxt, { color: '#15803d' }]}>
+                  📋 ENTREGA
+                </Text>
+              </View>
+            )}
             <View style={[s.estadoBadge, { backgroundColor: estadoBgColor, borderColor: estadoBorderColor }]}>
               <Text style={[s.estadoBadgeTxt, { color: estadoTextColor }]}>{badgeLabel}</Text>
             </View>

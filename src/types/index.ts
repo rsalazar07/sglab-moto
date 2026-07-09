@@ -14,6 +14,7 @@ export interface Ticket {
   codigo?: string;
   estado: EstadoTicket;
   prioridad: 'ALTA' | 'MEDIA' | 'BAJA';
+  modalidad?: string;
   motorizadoId?: string | null;
   tipoMuestra?: string;
   tipo?: string;
