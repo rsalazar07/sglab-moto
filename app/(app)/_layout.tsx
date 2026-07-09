@@ -5,7 +5,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useAuthStore } from '../../src/store/authStore';
 import { useTicketsStore } from '../../src/store/ticketsStore';
 import { getSocket } from '../../src/socket/socket';
-import { api } from '../../src/api/client';
+import { ticketsApi } from '../../src/api/tickets';
 import type { EstadoTicket } from '../../src/types';
 
 export default function AppLayout() {
@@ -15,8 +15,17 @@ export default function AppLayout() {
   const updateTicket = useTicketsStore((s) => s.updateTicket);
   const removeTicket = useTicketsStore((s) => s.removeTicket);
   const requestRefresh = useTicketsStore((s) => s.requestRefresh);
+  const setTickets = useTicketsStore((s) => s.setTickets);
   const insets = useSafeAreaInsets();
   const socketInitDone = useRef(false);
+
+  const refreshTickets = async () => {
+    try {
+      const data = await ticketsApi.getMisTickets();
+      setTickets(data);
+      requestRefresh();
+    } catch {}
+  };
 
   useEffect(() => {
     if (!isAuthenticated) {
@@ -33,10 +42,16 @@ export default function AppLayout() {
       const socket = await getSocket();
       socket.off('ticket:new');
       socket.off('ticket:update');
+      socket.off('connect');
+
+      socket.on('connect', () => {
+        console.log('[Layout] WebSocket reconectado — refrescando tickets');
+        refreshTickets();
+      });
 
       socket.on('ticket:new', async (data: { ticketId: string }) => {
         try {
-          const { data: t } = await api.get(`/tickets/${data.ticketId}`);
+          const { data: t } = await ticketsApi.getById(data.ticketId);
           if (t.motorizadoId && t.motorizadoId !== user?.id) return;
           addTicket(t);
           requestRefresh();

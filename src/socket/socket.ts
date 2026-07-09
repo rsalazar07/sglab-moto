@@ -8,7 +8,14 @@ const WS_URL = process.env.EXPO_PUBLIC_WS_URL ?? 'wss://recojossglab.duckdns.org
 let socket: Socket | null = null;
 
 export const getSocket = async (onSessionRevoked?: () => void): Promise<Socket> => {
-  if (socket) return socket;
+  if (socket?.connected) return socket;
+
+  // Si hay un socket viejo desconectado, limpiarlo
+  if (socket) {
+    socket.removeAllListeners();
+    socket.disconnect();
+    socket = null;
+  }
 
   const token = await SecureStore.getItemAsync('accessToken');
   socket = io(`${WS_URL}/ws`, {
@@ -51,6 +58,9 @@ export const getSocket = async (onSessionRevoked?: () => void): Promise<Socket> 
 };
 
 export const disconnectSocket = () => {
-  socket?.disconnect();
-  socket = null;
+  if (socket) {
+    socket.removeAllListeners();
+    socket.disconnect();
+    socket = null;
+  }
 };
