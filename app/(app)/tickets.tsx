@@ -852,15 +852,6 @@ export default function TicketsScreen() {
               <Text style={[s.sheetTitle, { fontSize: DT?.fontSizes?.title || 16 }]}>Registrar recojo</Text>
               <Text style={[s.sheetSub, { fontSize: DT?.fontSizes?.caption || 12 }]}>Opcional — completa lo que aplique</Text>
 
-              <Text style={[s.msec, { fontSize: DT?.fontSizes?.micro || 9 }]}>Nombre de referencia</Text>
-              <TextInput
-                style={s.minp}
-                value={refNombre}
-                onChangeText={setRefNombre}
-                placeholder={config?.dashboard?.registroPlaceholders?.paciente || 'Ej. María López'}
-                placeholderTextColor={C.grayBorder}
-              />
-
               <Text style={[s.msec, { fontSize: DT?.fontSizes?.micro || 9 }]}>Foto de evidencia <Text style={s.optional}>(opcional)</Text></Text>
               {!fotoUri ? (
                 <TouchableOpacity style={s.fotoBtn} onPress={tomarFoto}>
@@ -880,12 +871,12 @@ export default function TicketsScreen() {
                 </View>
               )}
 
-              <Text style={[s.msec, { fontSize: DT?.fontSizes?.micro || 9 }]}>Observaciones <Text style={s.optional}>(opcional)</Text></Text>
+              <Text style={[s.msec, { fontSize: DT?.fontSizes?.micro || 9 }]}>Observaciones / Incidencias <Text style={s.optional}>(opcional)</Text></Text>
               <TextInput
                 style={[s.minp, { height: 72, textAlignVertical: 'top' }]}
                 value={observaciones}
                 onChangeText={setObservaciones}
-                placeholder="Ej. Muestra en buen estado, sin incidencias"
+                placeholder="Ej. Accidente en la ruta, no pude llegar, cliente no disponible, etc."
                 placeholderTextColor={C.grayBorder}
                 multiline
               />
