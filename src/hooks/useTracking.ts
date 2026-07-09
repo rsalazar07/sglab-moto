@@ -3,6 +3,7 @@
  *
  * - Foreground service con notificación persistente
  * - WebSocket + REST para puntos en tiempo real
+ * - Cola offline: si falla el envío, guarda en archivo y reenvía después
  * - Background Fetch (despertar forzado cada ~15 min) para Infinix/Huawei/Xiaomi
  * - AppState listener: al volver a foreground, reinicia tracking automáticamente
  * - Auto-creación de sesión si el backend la cerró por inactividad
@@ -14,12 +15,89 @@ import * as Location from 'expo-location';
 import * as TaskManager from 'expo-task-manager';
 import * as BackgroundFetch from 'expo-background-fetch';
 import * as KeepAwake from 'expo-keep-awake';
+import * as FileSystem from 'expo-file-system';
 import { getSocket } from '../socket/socket';
 import { api } from '../api/client';
 
 const GPS_TASK = 'SGLAB_GPS_TASK';
 const BG_FETCH_TASK = 'SGLAB_BG_FETCH';
 const INTERVAL_MS = 5000; // cada 5 segundos en foreground
+const OFFLINE_QUEUE_FILE = `${FileSystem.documentDirectory}gps_offline_queue.json`;
+
+// ─── Cola offline: guarda puntos cuando no hay conexión ────────────
+async function guardarEnColaOffline(payload: object) {
+  try {
+    const existe = await FileSystem.getInfoAsync(OFFLINE_QUEUE_FILE);
+    let cola: object[] = [];
+    if (existe.exists) {
+      const raw = await FileSystem.readAsStringAsync(OFFLINE_QUEUE_FILE);
+      cola = JSON.parse(raw);
+    }
+    cola.push({ ...payload, timestamp: Date.now() });
+    await FileSystem.writeAsStringAsync(OFFLINE_QUEUE_FILE, JSON.stringify(cola));
+  } catch (e) {
+    console.warn('[Tracking] Error guardando en cola offline:', e);
+  }
+}
+
+async function reenviarColaOffline() {
+  try {
+    const existe = await FileSystem.getInfoAsync(OFFLINE_QUEUE_FILE);
+    if (!existe.exists) return;
+    const raw = await FileSystem.readAsStringAsync(OFFLINE_QUEUE_FILE);
+    const cola: any[] = JSON.parse(raw);
+    if (cola.length === 0) return;
+
+    const exitosos: number[] = [];
+    for (let i = 0; i < cola.length; i++) {
+      try {
+        await api.post('/tracking/point', {
+          latitud: cola[i].latitud,
+          longitud: cola[i].longitud,
+          velocidad: cola[i].velocidad ?? 0,
+        });
+        exitosos.push(i);
+      } catch {
+        // Si falla uno, probablemente fallen todos — lo dejamos para próximo intento
+        break;
+      }
+    }
+
+    if (exitosos.length > 0) {
+      const restantes = cola.filter((_, i) => !exitosos.includes(i));
+      if (restantes.length > 0) {
+        await FileSystem.writeAsStringAsync(OFFLINE_QUEUE_FILE, JSON.stringify(restantes));
+      } else {
+        await FileSystem.deleteAsync(OFFLINE_QUEUE_FILE, { idempotent: true });
+      }
+      console.log(`[Tracking] Cola offline: ${exitosos.length} reenviados, ${restantes.length} pendientes`);
+    }
+  } catch (e) {
+    console.warn('[Tracking] Error reenviando cola offline:', e);
+  }
+}
+
+// ─── Helper: envía punto con cola offline ──────────────────────────
+async function enviarPunto(payload: { latitud: number; longitud: number; velocidad: number }) {
+  // Intentar WebSocket primero (más rápido)
+  try {
+    const socket = await getSocket();
+    socket.emit('tracking:point', payload);
+    return; // Éxito por WS
+  } catch {
+    // WS falló, intentar REST
+  }
+
+  try {
+    await api.post('/tracking/point', payload);
+    // Si el envío fue exitoso, aprovechar para reenviar cola pendiente
+    reenviarColaOffline();
+  } catch {
+    // Sin conexión — guardar en cola offline
+    console.warn('[Tracking] Sin conexión, guardando punto en cola offline');
+    await guardarEnColaOffline(payload);
+  }
+}
 
 // ─── Task de background GPS (corre aunque app esté minimizada) ──
 TaskManager.defineTask(GPS_TASK, async ({ data, error }: any) => {
@@ -30,7 +108,7 @@ TaskManager.defineTask(GPS_TASK, async ({ data, error }: any) => {
     longitud: loc.coords.longitude,
     velocidad: loc.coords.speed ?? 0,
   };
-  try { await api.post('/tracking/point', payload); } catch {}
+  await enviarPunto(payload);
 });
 
 // ─── Background Fetch: salvavidas para fabricantes agresivos ──
@@ -48,6 +126,8 @@ try {
       };
       // Intentar por REST (más confiable que WS en background)
       await api.post('/tracking/point', payload);
+      // También reenviar cola pendiente
+      reenviarColaOffline();
       return BackgroundFetch.BackgroundFetchResult.NewData;
     } catch {
       return BackgroundFetch.BackgroundFetchResult.NoData;
@@ -88,6 +168,9 @@ export const useTracking = () => {
 
     console.log('[Tracking] App foreground — reiniciando polling GPS');
 
+    // Al volver a foreground, reenviar cola pendiente
+    reenviarColaOffline();
+
     // Iniciar nuevo polling
     interval.current = setInterval(async () => {
       try {
@@ -99,13 +182,10 @@ export const useTracking = () => {
           longitud: loc.coords.longitude,
           velocidad: loc.coords.speed ?? 0,
         };
-        try {
-          const socket = await getSocket();
-          socket.emit('tracking:point', payload);
-        } catch {
-          await api.post('/tracking/point', payload);
-        }
-      } catch {}
+        await enviarPunto(payload);
+      } catch {
+        // GPS no disponible en este ciclo — el background task lo cubre
+      }
     }, INTERVAL_MS);
 
     // Re-asegurar que la task de background sigue activa
@@ -115,7 +195,7 @@ export const useTracking = () => {
         await Location.startLocationUpdatesAsync(GPS_TASK, {
           accuracy: Location.Accuracy.Balanced,
           timeInterval: 10000,
-          distanceInterval: 20,
+          distanceInterval: 0, // Enviar por tiempo, no por distancia
           showsBackgroundLocationIndicator: true,
           foregroundService: {
             notificationTitle: '🏍️ SGLab Moto activo',
@@ -160,7 +240,7 @@ export const useTracking = () => {
         await Location.startLocationUpdatesAsync(GPS_TASK, {
           accuracy: Location.Accuracy.Balanced,
           timeInterval: 10000,
-          distanceInterval: 20,
+          distanceInterval: 0, // Enviar por tiempo, no por distancia
           showsBackgroundLocationIndicator: true,
           foregroundService: {
             notificationTitle: '🏍️ SGLab Moto activo',
@@ -217,14 +297,17 @@ export const useTracking = () => {
       }
     } catch {}
 
-    // 4. Notificar servidor
+    // 4. Antes de parar, reenviar cola pendiente
+    await reenviarColaOffline();
+
+    // 5. Notificar servidor
     try { await api.post('/tracking/stop', {}); } catch {}
     try {
       const socket = await getSocket();
       socket.emit('tracking:stop');
     } catch {}
 
-    // 5. Liberar keep-awake
+    // 6. Liberar keep-awake
     try { await KeepAwake.deactivateKeepAwake(); } catch {}
 
     active.current = false;
