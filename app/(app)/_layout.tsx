@@ -1,10 +1,11 @@
 import { Tabs, router } from 'expo-router';
-import { Text } from 'react-native';
+import { Text, AppState } from 'react-native';
 import { useEffect, useRef } from 'react';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useAuthStore } from '../../src/store/authStore';
 import { useTicketsStore } from '../../src/store/ticketsStore';
 import { getSocket } from '../../src/socket/socket';
+import { ticketsApi } from '../../src/api/tickets';
 import type { EstadoTicket } from '../../src/types';
 
 export default function AppLayout() {
@@ -16,6 +17,8 @@ export default function AppLayout() {
   const setTickets = useTicketsStore((s) => s.setTickets);
   const insets = useSafeAreaInsets();
   const socketInitDone = useRef(false);
+  const pollingRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const appStateRef = useRef(AppState.currentState);
 
   const refreshTickets = async () => {
     try {
@@ -29,6 +32,30 @@ export default function AppLayout() {
     if (!isAuthenticated) {
       router.replace('/login');
     }
+  }, [isAuthenticated]);
+
+  // ─── Polling silencioso cada 5s ───
+  useEffect(() => {
+    if (!isAuthenticated) return;
+    // Refrescar inmediatamente al montar
+    refreshTickets();
+    pollingRef.current = setInterval(refreshTickets, 5000);
+    return () => {
+      if (pollingRef.current) clearInterval(pollingRef.current);
+    };
+  }, [isAuthenticated]);
+
+  // ─── Refrescar al volver de background ───
+  useEffect(() => {
+    if (!isAuthenticated) return;
+    const sub = AppState.addEventListener('change', (nextState) => {
+      if (appStateRef.current.match(/inactive|background/) && nextState === 'active') {
+        console.log('[Layout] App en foreground — refrescando tickets');
+        refreshTickets();
+      }
+      appStateRef.current = nextState;
+    });
+    return () => sub.remove();
   }, [isAuthenticated]);
 
   // Socket listeners persistentes — viven mientras el layout esté montado (navegación entre tabs)
@@ -47,7 +74,7 @@ export default function AppLayout() {
         refreshTickets();
       });
 
-      socket.on('ticket:new', async (data: { ticketId: string }) => {
+      socket.on('ticket:new', async (_data: { ticketId: string }) => {
         // Para ticket nuevo, simplemente refrescar toda la lista
         refreshTickets();
       });
@@ -59,6 +86,8 @@ export default function AppLayout() {
           updateTicket(data.ticketId, data.estado);
         }
         requestRefresh();
+        // También refrescar desde API para garantizar que tenemos el ticket si es nuevo
+        refreshTickets();
       });
     };
     initSocket();
