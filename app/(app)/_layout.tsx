@@ -5,13 +5,11 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useAuthStore } from '../../src/store/authStore';
 import { useTicketsStore } from '../../src/store/ticketsStore';
 import { getSocket } from '../../src/socket/socket';
-import { ticketsApi } from '../../src/api/tickets';
 import type { EstadoTicket } from '../../src/types';
 
 export default function AppLayout() {
   const isAuthenticated = useAuthStore((s) => s.isAuthenticated);
   const user = useAuthStore((s) => s.user);
-  const addTicket = useTicketsStore((s) => s.addTicket);
   const updateTicket = useTicketsStore((s) => s.updateTicket);
   const removeTicket = useTicketsStore((s) => s.removeTicket);
   const requestRefresh = useTicketsStore((s) => s.requestRefresh);
@@ -50,12 +48,8 @@ export default function AppLayout() {
       });
 
       socket.on('ticket:new', async (data: { ticketId: string }) => {
-        try {
-          const { data: t } = await ticketsApi.getById(data.ticketId);
-          if (t.motorizadoId && t.motorizadoId !== user?.id) return;
-          addTicket(t);
-          requestRefresh();
-        } catch {}
+        // Para ticket nuevo, simplemente refrescar toda la lista
+        refreshTickets();
       });
 
       socket.on('ticket:update', (data: { ticketId: string; estado: EstadoTicket; motorizadoId?: string; motorizadoNombre?: string; timestamp?: string }) => {
