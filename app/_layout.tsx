@@ -85,8 +85,13 @@ export default function RootLayout() {
         }
       } catch (e) {
         log('ERROR', 'auth', `_layout init: ${e instanceof Error ? e.message : String(e)}`);
-        await SecureStore.deleteItemAsync('accessToken');
-        await SecureStore.deleteItemAsync('refreshToken');
+        // ⚠️ Solo borrar tokens si el servidor respondió 401 (token expirado/inválido)
+        // NO borrar por errores de red (timeout, DNS lento, sin señal)
+        const isAuthError = (e as any)?.response?.status === 401 || (e as any)?.status === 401;
+        if (isAuthError) {
+          await SecureStore.deleteItemAsync('accessToken');
+          await SecureStore.deleteItemAsync('refreshToken');
+        }
       } finally {
         setLoading(false);
       }

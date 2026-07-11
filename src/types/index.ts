@@ -32,6 +32,19 @@ export interface Ticket {
   notas?: string;
   createdAt: string;
   updatedAt: string;
+  // SDUI: botones/config desde el VPS (ignorado por apps viejas)
+  flow?: {
+    boton: {
+      label: string;
+      color: string;
+      accion: string;
+      endpoint: string | null;
+      metodo: string | null;
+      body?: any;
+      abreModal?: boolean;
+      requiereMotivo?: boolean;
+    } | null;
+  } | null;
 }
 
 export interface AuthResponse {

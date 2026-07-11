@@ -175,7 +175,9 @@ const TicketCard = memo(({ item, config, loadingId, onAvanzar, onCancelar }: {
     pending: C.orange || '#f59e0b',
     active: '#6366f1',
   };
-  const fb = config?.flowButtons?.[item.estado];
+  // Accion button — prioridad al flow.boton del VPS
+  const flowBoton = item.flow?.boton;
+  const fb = flowBoton || config?.flowButtons?.[item.estado] || null;
   const btnLabel = fb?.label || btnLabels[uiStatus];
   const btnColor = fb?.color || btnColors[uiStatus];
   const cargando = loadingId === item.id;
@@ -455,9 +457,16 @@ export default function TicketsScreen() {
     ]);
   };
 
-  // Avanzar estado de ticket
+  // Avanzar estado de ticket — usa flow.boton del VPS si existe
   const avanzarEstado = async (ticket: Ticket) => {
-    const flow = CLIENT_FLOW_MAP[ticket.estado];
+    // Prioridad: flow.boton del VPS > CLIENT_FLOW_MAP hardcodeado
+    const fb = ticket.flow?.boton;
+    const flow = fb ? {
+      accion: fb.accion,
+      endpoint: fb.endpoint, // Ya viene completo con el ID del ticket
+      body: fb.body,
+      abreModal: fb.abreModal,
+    } : CLIENT_FLOW_MAP[ticket.estado];
     if (!flow) return;
 
     if (flow.accion === 'tomarTicket') {
@@ -479,11 +488,13 @@ export default function TicketsScreen() {
     }
 
     if (flow.abreModal) {
-      if (ticket.estado === 'EN_RUTA' && flow.endpoint) {
+      // Resolver endpoint (string del VPS o función de CLIENT_FLOW_MAP)
+      const ep = typeof flow.endpoint === 'function' ? flow.endpoint(ticket.id) : flow.endpoint;
+      if (ticket.estado === 'EN_RUTA' && ep) {
         const prevTickets = tickets;
         setTickets(prev => prev.map(t => t.id === ticket.id ? { ...t, estado: 'EN_RECOJO' as EstadoTicket } : t));
         try {
-          const res = await api.post(flow.endpoint(ticket.id), flow.body);
+          const res = await api.post(ep, flow.body);
           setTickets(prev => prev.map(t => t.id === ticket.id ? (res.data ?? { ...t, estado: 'EN_RECOJO' as EstadoTicket }) : t));
         } catch (e: any) {
           setTickets(prevTickets);
@@ -499,8 +510,10 @@ export default function TicketsScreen() {
     const nextEstado = flow.body?.estado as EstadoTicket;
     const prevTickets = tickets;
     setTickets(prev => prev.map(t => t.id === ticket.id ? { ...t, estado: nextEstado } : t));
+    // Resolver endpoint (string del VPS o función de CLIENT_FLOW_MAP)
+    const ep = typeof flow.endpoint === 'function' ? flow.endpoint(ticket.id) : flow.endpoint;
     try {
-      const res = await api.post(flow.endpoint!(ticket.id), flow.body);
+      const res = await api.post(ep, flow.body);
       setTickets(prev => prev.map(t => t.id === ticket.id ? (res.data ?? { ...t, estado: nextEstado }) : t));
       if (!turnoActivo) await iniciarTurno();
     } catch (e: any) {
