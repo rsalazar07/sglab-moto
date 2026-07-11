@@ -99,11 +99,12 @@ const CLIENT_FLOW_MAP: Record<string, {
   EN_LABORATORIO: { accion: 'entregar', endpoint: (id) => `/tickets/${id}/cambiar-estado`, body: { estado: 'ENTREGADO' } },
 };
 
-const TicketCard = memo(({ item, config, loadingId, onAvanzar }: {
+const TicketCard = memo(({ item, config, loadingId, onAvanzar, onCancelar }: {
   item: Ticket;
   config: any;
   loadingId: string | null;
   onAvanzar: (ticket: Ticket) => void;
+  onCancelar: (ticket: Ticket) => void;
 }) => {
   const C = config?.dashboard?.colors || C_FALLBACK;
   const DT = config?.designTokens || {};
@@ -307,6 +308,15 @@ const TicketCard = memo(({ item, config, loadingId, onAvanzar }: {
           </View>
         )}
 
+        {!isDone && (ticket.estado === 'PENDIENTE' || ticket.estado === 'ASIGNADO') && (
+          <TouchableOpacity
+            style={{ marginTop: 6, alignSelf: 'flex-end' }}
+            onPress={() => onCancelar(item)}
+            activeOpacity={0.7}
+          >
+            <Text style={{ fontSize: 11, color: '#94a3b8', fontWeight: '600' }}>Cancelar →</Text>
+          </TouchableOpacity>
+        )}
         {isDone && (
           <Text style={[s.doneTag, { fontSize: fs.small || 10 }]}>✅ {badgeLabel}</Text>
         )}
@@ -324,6 +334,10 @@ export default function TicketsScreen() {
   const [turnoActivo, setTurnoActivo] = useState(false);
   const [loadingId, setLoadingId] = useState<string | null>(null);
   const [estadoMoto, setEstadoMoto] = useState<string>('OFF_LINE');
+  // Cancelar modal\
+  const [cancelModal, setCancelModal] = useState(false);
+  const [cancelMotivo, setCancelMotivo] = useState('');
+  const [cancelLoading, setCancelLoading] = useState(false);
 
   // Modales
   const [estadoModal, setEstadoModal] = useState(false);
@@ -454,6 +468,7 @@ export default function TicketsScreen() {
         const res = await ticketsApi.tomarTicket(ticket.id);
         setTickets(prev => prev.map(t => t.id === ticket.id ? (res ?? { ...t, estado: 'ASIGNADO' as EstadoTicket }) : t));
         if (!turnoActivo) await iniciarTurno();
+        await cargarTickets();
       } catch (e: any) {
         setTickets(prevTickets);
         const msg = e.response?.data?.message;
@@ -578,6 +593,31 @@ export default function TicketsScreen() {
 
     setSubiendo(false);
     currentTicketId.current = null;
+  };
+
+  const handleCancelar = async (ticket: Ticket) => {
+    setCancelMotivo('');
+    currentTicketId.current = ticket.id;
+    setCancelModal(true);
+  };
+
+  const confirmarCancelacion = async () => {
+    const id = currentTicketId.current;
+    if (!id || !cancelMotivo.trim()) return;
+    setCancelLoading(true);
+    try {
+      await api.post(`/tickets/${id}/cancelar`, { motivo: cancelMotivo.trim() });
+      setCancelModal(false);
+      setCancelMotivo('');
+      Alert.alert('✅ Cancelado', 'El ticket ha sido cancelado.');
+      await cargarTickets();
+    } catch (e: any) {
+      const msg = e.response?.data?.message;
+      Alert.alert('Error', msg || 'No se pudo cancelar el ticket');
+    } finally {
+      setCancelLoading(false);
+      currentTicketId.current = null;
+    }
   };
 
   const tomarFoto = async () => {
@@ -781,11 +821,11 @@ export default function TicketsScreen() {
             return (
               <View>
                 <ProgressStepper estado={item.estado} C={C} />
-                <TicketCard item={item} config={config} loadingId={loadingId} onAvanzar={avanzarEstado} />
+                <TicketCard item={item} config={config} loadingId={loadingId} onAvanzar={avanzarEstado} onCancelar={handleCancelar} />
               </View>
             );
           }
-          return <TicketCard item={item} config={config} loadingId={loadingId} onAvanzar={avanzarEstado} />;
+          return <TicketCard item={item} config={config} loadingId={loadingId} onAvanzar={avanzarEstado} onCancelar={handleCancelar} />;
         }}
         contentContainerStyle={s.list}
         refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor="#fff" />}
@@ -955,6 +995,50 @@ export default function TicketsScreen() {
             <TouchableOpacity style={[s.cancelBtn, { marginTop: 8 }]} onPress={volverAlFormulario}>
               <Text style={[s.cancelBtnTxt, { color: C.text, fontSize: DT?.fontSizes?.body || 14 }]}>No, volver a registrar</Text>
             </TouchableOpacity>
+          </View>
+        </View>
+      </Modal>
+      )}
+
+      {/* ══ MODAL CANCELAR TICKET ══ */}
+      {(screen.showCancelModal !== false) && (
+      <Modal visible={cancelModal} transparent animationType="slide">
+        <View style={s.overlay}>
+          <View style={s.sheet}>
+            <View style={s.handle} />
+            <Text style={[s.sheetTitle, { fontSize: DT?.fontSizes?.title || 16 }]}>❌ Cancelar recogida</Text>
+            <Text style={[s.sheetSub, { fontSize: DT?.fontSizes?.caption || 12 }]}>Motivo de cancelación (obligatorio)</Text>
+
+            <TextInput
+              style={[s.minp, { height: 80, textAlignVertical: 'top' }]}
+              value={cancelMotivo}
+              onChangeText={setCancelMotivo}
+              placeholder="Ej. Cliente no disponible, dirección incorrecta..."
+              placeholderTextColor={C.grayBorder}
+              multiline
+              autoFocus
+            />
+
+            <View style={s.mActions}>
+              <TouchableOpacity
+                style={s.mCancel}
+                onPress={() => { setCancelModal(false); setCancelMotivo(''); }}
+              >
+                <Text style={[s.mCancelTxt, { fontSize: DT?.fontSizes?.caption || 12 }]}>Volver</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[s.mConfirm, {
+                  backgroundColor: cancelMotivo.trim() ? '#ef4444' : '#cbd5e1',
+                }, cancelLoading && { opacity: 0.6 }]}
+                onPress={confirmarCancelacion}
+                disabled={!cancelMotivo.trim() || cancelLoading}
+              >
+                {cancelLoading
+                  ? <ActivityIndicator color={C.white} />
+                  : <Text style={[s.mConfirmTxt, { fontSize: DT?.fontSizes?.caption || 12 }]}>Confirmar cancelación</Text>
+                }
+              </TouchableOpacity>
+            </View>
           </View>
         </View>
       </Modal>

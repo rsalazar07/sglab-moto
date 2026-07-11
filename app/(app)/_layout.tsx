@@ -1,6 +1,6 @@
 import { Tabs, router } from 'expo-router';
 import { Text, AppState } from 'react-native';
-import { useEffect, useRef } from 'react';
+import { useEffect, useRef, useCallback } from 'react';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useAuthStore } from '../../src/store/authStore';
 import { useTicketsStore } from '../../src/store/ticketsStore';
@@ -16,17 +16,20 @@ export default function AppLayout() {
   const requestRefresh = useTicketsStore((s) => s.requestRefresh);
   const setTickets = useTicketsStore((s) => s.setTickets);
   const insets = useSafeAreaInsets();
-  const socketInitDone = useRef(false);
   const pollingRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const appStateRef = useRef(AppState.currentState);
 
-  const refreshTickets = async () => {
+  const refreshTickets = useCallback(async () => {
     try {
       const data = await ticketsApi.getMisTickets();
-      setTickets(data);
-      requestRefresh();
-    } catch {}
-  };
+      if (data) {
+        setTickets(data);
+        requestRefresh();
+      }
+    } catch (e) {
+      console.warn('[Layout] Error refreshing tickets:', e);
+    }
+  }, [setTickets, requestRefresh]);
 
   useEffect(() => {
     if (!isAuthenticated) {
@@ -37,13 +40,12 @@ export default function AppLayout() {
   // ─── Polling silencioso cada 5s ───
   useEffect(() => {
     if (!isAuthenticated) return;
-    // Refrescar inmediatamente al montar
     refreshTickets();
     pollingRef.current = setInterval(refreshTickets, 5000);
     return () => {
       if (pollingRef.current) clearInterval(pollingRef.current);
     };
-  }, [isAuthenticated]);
+  }, [isAuthenticated, refreshTickets]);
 
   // ─── Refrescar al volver de background ───
   useEffect(() => {
@@ -56,15 +58,19 @@ export default function AppLayout() {
       appStateRef.current = nextState;
     });
     return () => sub.remove();
-  }, [isAuthenticated]);
+  }, [isAuthenticated, refreshTickets]);
 
-  // Socket listeners persistentes — viven mientras el layout esté montado (navegación entre tabs)
+  // ─── Socket listeners: siempre se re-registran al montar el layout ───
   useEffect(() => {
-    if (!isAuthenticated || !user || socketInitDone.current) return;
-    socketInitDone.current = true;
+    if (!isAuthenticated || !user) return;
+
+    let mounted = true;
 
     const initSocket = async () => {
       const socket = await getSocket();
+
+      if (!mounted || !socket) return;
+
       socket.off('ticket:new');
       socket.off('ticket:update');
       socket.off('connect');
@@ -75,7 +81,7 @@ export default function AppLayout() {
       });
 
       socket.on('ticket:new', async (_data: { ticketId: string }) => {
-        // Para ticket nuevo, simplemente refrescar toda la lista
+        console.log('[Layout] Nuevo ticket vía WS — refrescando');
         refreshTickets();
       });
 
@@ -86,12 +92,16 @@ export default function AppLayout() {
           updateTicket(data.ticketId, data.estado);
         }
         requestRefresh();
-        // También refrescar desde API para garantizar que tenemos el ticket si es nuevo
         refreshTickets();
       });
     };
+
     initSocket();
-  }, [isAuthenticated, user]);
+
+    return () => {
+      mounted = false;
+    };
+  }, [isAuthenticated, user, refreshTickets, removeTicket, updateTicket, requestRefresh]);
 
   const tabBarHeight = 64 + insets.bottom;
 
