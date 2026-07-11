@@ -308,7 +308,7 @@ const TicketCard = memo(({ item, config, loadingId, onAvanzar, onCancelar }: {
           </View>
         )}
 
-        {!isDone && (ticket.estado === 'PENDIENTE' || ticket.estado === 'ASIGNADO') && (
+        {!isDone && (item.estado === 'PENDIENTE' || item.estado === 'ASIGNADO') && (
           <TouchableOpacity
             style={{ marginTop: 6, alignSelf: 'flex-end' }}
             onPress={() => onCancelar(item)}
