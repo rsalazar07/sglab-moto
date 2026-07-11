@@ -42,3 +42,4 @@ yarn-error.*
 .claude/
 *.bak
 app/\(app\)/
+"app/\\(app\\)/"
