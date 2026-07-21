@@ -350,8 +350,7 @@ export default function TicketsScreen() {
   // Datos del registro
   const [refNombre, setRefNombre] = useState('');
   const [observaciones, setObservaciones] = useState('');
-  const [fotoUri, setFotoUri] = useState<string | null>(null);
-  const [fotoBase64, setFotoBase64] = useState<string | undefined>(undefined);
+  const [fotos, setFotos] = useState<Array<{uri: string; base64?: string}>>([]);
   const [metodoPago, setMetodoPago] = useState<MetodoPago | null>(null);
   const [monto, setMonto] = useState('');
   const [subiendo, setSubiendo] = useState(false);
@@ -369,6 +368,7 @@ export default function TicketsScreen() {
   const SC = config?.screenConfig || {};
   const screen = SC?.tickets || {};
   const sections = SC?.sections || {};
+  const maxFotos = screen?.maxFotos ?? 1;
 
   const cargarTickets = useCallback(async () => {
     try {
@@ -527,14 +527,13 @@ export default function TicketsScreen() {
   const resetRegistroForm = () => {
     setRefNombre('');
     setObservaciones('');
-    setFotoUri(null);
-    setFotoBase64(undefined);
+    setFotos([]);
     setMetodoPago(null);
     setMonto('');
   };
 
   const intentarConfirmar = () => {
-    const tieneData = fotoUri || refNombre.trim() || observaciones.trim();
+    const tieneData = fotos.length > 0 || refNombre.trim() || observaciones.trim();
     if (!tieneData) {
       setConfirmModal(true);
     } else {
@@ -577,10 +576,11 @@ export default function TicketsScreen() {
         console.error('[completarRecojo] Error guardando registro vacío:', e);
         log('ERROR', 'completarRecojo', `guardarRegistro(sinInfo): ${e instanceof Error ? e.message : String(e)}`);
       }
-    } else if (refNombre || observaciones || fotoUri) {
+    } else if (refNombre || observaciones || fotos.length > 0) {
       try {
         const body: any = { refNombre, observaciones };
-        if (fotoBase64) body.fotoBase64 = fotoBase64;
+        const fotosBase64 = fotos.filter(f => f.base64).map(f => f.base64);
+        if (fotosBase64.length > 0) body.fotosBase64 = fotosBase64;
         await ticketsApi.guardarRegistro(id, body);
       } catch (e) {
         console.error('[completarRecojo] Error guardando registro:', e);
@@ -593,7 +593,7 @@ export default function TicketsScreen() {
       setTickets(prev => prev.map(t => t.id === id ? { ...t, estado: 'RECOGIDO' as EstadoTicket } : t));
       if (sinInfo) {
         Alert.alert('✅ Recojo completado', 'El registro se guardó sin información adicional.');
-      } else if (fotoUri || refNombre || observaciones || (metodoPago && metodoPago !== 'SIN_PAGO')) {
+      } else if (fotos.length > 0 || refNombre || observaciones || (metodoPago && metodoPago !== 'SIN_PAGO')) {
         Alert.alert('✅ Registro guardado', 'Los datos del recojo se guardaron correctamente.');
       } else {
         Alert.alert('✅ Recojo completado', 'El ticket se marcó como recogido.');
@@ -633,7 +633,7 @@ export default function TicketsScreen() {
     }
   };
 
-  const tomarFoto = async () => {
+  const tomarFoto = useCallback(async () => {
     const { status } = await ImagePicker.requestCameraPermissionsAsync();
     if (status !== 'granted') {
       Alert.alert('Permiso requerido', 'Necesitamos acceso a la cámara');
@@ -644,13 +644,11 @@ export default function TicketsScreen() {
       allowsEditing: false,
       base64: true,
     });
-    if (!result.canceled) {
-      setFotoUri(result.assets[0].uri);
-      if (result.assets[0].base64) {
-        setFotoBase64(result.assets[0].base64);
-      }
+    if (!result.canceled && result.assets[0]) {
+      const asset = result.assets[0];
+      setFotos(prev => [...prev, { uri: asset.uri, base64: asset.base64 ?? undefined }]);
     }
-  };
+  }, []);
 
   const confirmarEstadoMoto = async () => {
     setEstadoModal(false);
@@ -905,23 +903,26 @@ export default function TicketsScreen() {
               <Text style={[s.sheetTitle, { fontSize: DT?.fontSizes?.title || 16 }]}>Registrar recojo</Text>
               <Text style={[s.sheetSub, { fontSize: DT?.fontSizes?.caption || 12 }]}>Opcional — completa lo que aplique</Text>
 
-              <Text style={[s.msec, { fontSize: DT?.fontSizes?.micro || 9 }]}>Foto de evidencia <Text style={s.optional}>(opcional)</Text></Text>
-              {!fotoUri ? (
-                <TouchableOpacity style={s.fotoBtn} onPress={tomarFoto}>
-                  <Text style={[s.fotoBtnLbl, { fontSize: DT?.fontSizes?.caption || 12 }]}>📷 Tomar foto</Text>
-                  <Text style={[s.fotoBtnSub, { fontSize: DT?.fontSizes?.small || 10 }]}>Toca para abrir la cámara</Text>
-                </TouchableOpacity>
-              ) : (
-                <View style={s.fotoPreview}>
+              <Text style={[s.msec, { fontSize: DT?.fontSizes?.micro || 9 }]}>Fotos de evidencia <Text style={s.optional}>(opcional, máx {maxFotos})</Text></Text>
+              {fotos.map((foto, i) => (
+                <View key={`foto-${i}`} style={s.fotoPreview}>
                   <Text style={{ fontSize: DT?.fontSizes?.title || 16 }}>🖼️</Text>
                   <View style={{ flex: 1 }}>
-                    <Text style={[s.fotoName, { fontSize: DT?.fontSizes?.caption || 12 }]}>evidencia_foto.jpg</Text>
+                    <Text style={[s.fotoName, { fontSize: DT?.fontSizes?.caption || 12 }]}>evidencia_foto_{i + 1}.jpg</Text>
                     <Text style={{ fontSize: DT?.fontSizes?.small || 10, color: C.gray }}>Lista para subir</Text>
                   </View>
-                  <TouchableOpacity onPress={() => setFotoUri(null)}>
+                  <TouchableOpacity onPress={() => setFotos(prev => prev.filter((_, idx) => idx !== i))}>
                     <Text style={{ fontSize: DT?.fontSizes?.caption || 12, color: C.red, fontWeight: '700' }}>Quitar</Text>
                   </TouchableOpacity>
                 </View>
+              ))}
+              {fotos.length < maxFotos && (
+                <TouchableOpacity style={[s.fotoBtn, fotos.length > 0 && { marginTop: 4 }]} onPress={tomarFoto}>
+                  <Text style={[s.fotoBtnLbl, { fontSize: DT?.fontSizes?.caption || 12 }]}>
+                    {fotos.length === 0 ? '📷 Tomar foto' : `📷 Tomar foto ${fotos.length + 1}`}
+                  </Text>
+                  <Text style={[s.fotoBtnSub, { fontSize: DT?.fontSizes?.small || 10 }]}>Toca para abrir la cámara</Text>
+                </TouchableOpacity>
               )}
 
               <Text style={[s.msec, { fontSize: DT?.fontSizes?.micro || 9 }]}>Observaciones / Incidencias <Text style={s.optional}>(opcional)</Text></Text>
